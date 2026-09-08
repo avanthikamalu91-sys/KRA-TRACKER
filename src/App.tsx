@@ -189,6 +189,8 @@ export default function App() {
   const totalRFT      = dashboard.blueSeal.rftCount + dashboard.silverSeal.rftCount;
   const overallRFTPct = totalStyles > 0 ? ((totalRFT / totalStyles) * 100).toFixed(1) : '0.0';
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   const [showLoginPage, setShowLoginPage] = useState(false);
   const [currentUser,   setCurrentUser]   = useState<UserProfile>({
     name: 'System Administrator',
@@ -236,13 +238,27 @@ export default function App() {
     );
   }
 
+  const handleNavClick = (id: NavItem) => {
+    setActiveNav(id);
+    setMobileMenuOpen(false);
+  };
+
   return (
     <div className="app-shell">
 
+      {/* ── Mobile Sidebar Overlay Backdrop ── */}
+      {mobileMenuOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* ═══════════════════════════════════════
-          SIDEBAR
+          SIDEBAR (Desktop & Mobile Slide Drawer)
       ═══════════════════════════════════════ */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         {/* Logo */}
         <div className="sidebar-logo">
           <div className="sidebar-logo-icon">
@@ -253,6 +269,17 @@ export default function App() {
             </svg>
           </div>
           <span className="sidebar-logo-text">KRA Tracker</span>
+          <button
+            type="button"
+            className="mobile-close-btn"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
 
         {/* Menu */}
@@ -264,7 +291,7 @@ export default function App() {
                 key={item.id}
                 id={`nav-${item.id}`}
                 className={`nav-item ${activeNav === item.id ? 'active' : ''}`}
-                onClick={() => setActiveNav(item.id)}
+                onClick={() => handleNavClick(item.id)}
               >
                 {item.icon}
                 {item.label}
@@ -288,12 +315,31 @@ export default function App() {
         {/* Tools */}
         <span className="sidebar-section-label">Tools</span>
         <nav className="sidebar-nav">
-          <button className="nav-item" onClick={() => appState === 'ready' ? (() => { setAppState('idle'); setRows([]); setFilters(DEFAULT_FILTERS); })() : document.getElementById('excel-file-input')?.click()}>
+          <button
+            className="nav-item"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              if (appState === 'ready') {
+                setAppState('idle');
+                setRows([]);
+                setFilters(DEFAULT_FILTERS);
+              } else {
+                document.getElementById('excel-file-input')?.click();
+              }
+            }}
+          >
             <IconUpload />
             {appState === 'ready' ? 'Change File' : 'Upload File'}
           </button>
           {appState === 'ready' && (
-            <button className="nav-item" onClick={() => window.print()} title="Export dashboard as PDF">
+            <button
+              className="nav-item"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                window.print();
+              }}
+              title="Export dashboard as PDF"
+            >
               <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                 <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
@@ -301,7 +347,15 @@ export default function App() {
               Export PDF
             </button>
           )}
-          <button className="nav-item" onClick={() => { setCurrentUser(prev => ({ ...prev, isLoggedIn: false })); setShowLoginPage(true); }} title="Switch account or logout">
+          <button
+            className="nav-item"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              setCurrentUser(prev => ({ ...prev, isLoggedIn: false }));
+              setShowLoginPage(true);
+            }}
+            title="Switch account or logout"
+          >
             <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
               <polyline points="16 17 21 12 16 7"/>
@@ -322,34 +376,51 @@ export default function App() {
         {/* ── Top Bar ── */}
         <div className="topbar">
           <div className="topbar-left">
-            <div className="topbar-title">
-              {activeNav === 'overview'  && 'Performance Overview'}
-              {activeNav === 'tracking'  && 'Sample Tracking'}
-              {activeNav === 'rejection' && 'Rejection Analysis & Defect Breakdown'}
-              {activeNav === 'pending'   && 'Pending Samples'}
-              {activeNav === 'vendor'    && 'Vendor Performance'}
-              {activeNav === 'breakdown' && 'Performance Breakdown'}
-              {activeNav === 'detail'    && 'Style Detail Analysis'}
-              {appState !== 'ready'      && 'Performance Overview'}
-            </div>
-            <div className="topbar-subtitle">
-              {appState === 'ready' ? (
-                <>
-                  <span className="topbar-subtitle-pill">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                      <line x1="16" y1="2" x2="16" y2="6"/>
-                      <line x1="8" y1="2" x2="8" y2="6"/>
-                      <line x1="3" y1="10" x2="21" y2="10"/>
-                    </svg>
-                    {dateRangeSubtitle}
-                  </span>
-                  <span>·</span>
-                  <span style={{ fontWeight: 600, color: 'var(--text-body)' }}>{fileName}</span>
-                </>
-              ) : (
-                'Upload a dataset to view analytics'
-              )}
+            {/* Hamburger Button for Mobile / Tablet */}
+            <button
+              type="button"
+              className="mobile-menu-btn"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open Navigation Menu"
+              title="Open Navigation Menu"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+
+            <div>
+              <div className="topbar-title">
+                {activeNav === 'overview'  && 'Performance Overview'}
+                {activeNav === 'tracking'  && 'Sample Tracking'}
+                {activeNav === 'rejection' && 'Rejection Analysis & Defect Breakdown'}
+                {activeNav === 'pending'   && 'Pending Samples'}
+                {activeNav === 'vendor'    && 'Vendor Performance'}
+                {activeNav === 'breakdown' && 'Performance Breakdown'}
+                {activeNav === 'detail'    && 'Style Detail Analysis'}
+                {appState !== 'ready'      && 'Performance Overview'}
+              </div>
+              <div className="topbar-subtitle">
+                {appState === 'ready' ? (
+                  <>
+                    <span className="topbar-subtitle-pill">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                      </svg>
+                      {dateRangeSubtitle}
+                    </span>
+                    <span className="topbar-subtitle-dot">·</span>
+                    <span className="topbar-subtitle-filename">{fileName}</span>
+                  </>
+                ) : (
+                  'Upload a dataset to view analytics'
+                )}
+              </div>
             </div>
           </div>
 
@@ -357,7 +428,7 @@ export default function App() {
             {appState === 'ready' && (
               <button
                 id="btn-export-pdf"
-                className="btn btn-primary btn-sm"
+                className="btn btn-primary btn-sm btn-export-desktop"
                 onClick={() => window.print()}
                 title="Export current dashboard view as PDF"
               >
@@ -368,8 +439,6 @@ export default function App() {
                 Export PDF
               </button>
             )}
-            <button className="topbar-icon-btn" title="Search"><IconSearch /></button>
-            <button className="topbar-icon-btn" title="Notifications"><IconBell /></button>
             <div className="topbar-user" onClick={() => setShowLoginPage(true)} title="Account Profile">
               <div className="topbar-avatar">{currentUser.name.slice(0, 2).toUpperCase()}</div>
               <div className="topbar-user-info">
@@ -575,6 +644,23 @@ export default function App() {
             </>
           )}
         </div>
+
+        {/* ── Mobile Bottom Quick Navigation Bar ── */}
+        {appState === 'ready' && (
+          <nav className="mobile-bottom-nav">
+            {navItems.map(item => (
+              <button
+                key={item.id}
+                className={`mobile-bottom-btn ${activeNav === item.id ? 'active' : ''}`}
+                onClick={() => handleNavClick(item.id)}
+                title={item.label}
+              >
+                {item.icon}
+                <span>{item.label.split(' ')[0]}</span>
+              </button>
+            ))}
+          </nav>
+        )}
       </div>
     </div>
   );
