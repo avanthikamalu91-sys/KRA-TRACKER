@@ -524,6 +524,9 @@ export interface BreakdownRow {
   overallRFT: number;
   overallNotRFT: number;
   overallRFTPct: number;
+  overallOnTimeCount: number;
+  overallOnTimeTotal: number;
+  overallOnTimePct: number;
   // Blue Seal
   blueSamples: number;
   blueTotal: number; // Unique Styles
@@ -533,6 +536,9 @@ export interface BreakdownRow {
   blueApproved: number;
   blueRejected: number;
   bluePending: number;
+  blueOnTimeCount: number;
+  blueOnTimeTotal: number;
+  blueOnTimePct: number;
   // Silver Seal
   silverSamples: number;
   silverTotal: number; // Unique Styles
@@ -542,6 +548,9 @@ export interface BreakdownRow {
   silverApproved: number;
   silverRejected: number;
   silverPending: number;
+  silverOnTimeCount: number;
+  silverOnTimeTotal: number;
+  silverOnTimePct: number;
 }
 
 export function computeBreakdown(
@@ -561,6 +570,22 @@ export function computeBreakdown(
     const totalRFT    = blue.rftCount + silver.rftCount;
     const overallRFTPct = totalStyles > 0 ? Math.round((totalRFT / totalStyles) * 1000) / 10 : 0;
 
+    const dimBlueRows = dimRows.filter(r => r.sealType === 'Blue Seal');
+    const dimSilverRows = dimRows.filter(r => r.sealType === 'Silver Seal');
+
+    // On-Time compliance calculations
+    const blueOnTimeCount = dimBlueRows.filter(r => r.onTime === true).length;
+    const blueOnTimeTotal = dimBlueRows.filter(r => r.onTime !== null).length;
+    const blueOnTimePct = blueOnTimeTotal > 0 ? Math.round((blueOnTimeCount / blueOnTimeTotal) * 1000) / 10 : 0;
+
+    const silverOnTimeCount = dimSilverRows.filter(r => r.onTime === true).length;
+    const silverOnTimeTotal = dimSilverRows.filter(r => r.onTime !== null).length;
+    const silverOnTimePct = silverOnTimeTotal > 0 ? Math.round((silverOnTimeCount / silverOnTimeTotal) * 1000) / 10 : 0;
+
+    const overallOnTimeCount = dimRows.filter(r => r.onTime === true).length;
+    const overallOnTimeTotal = dimRows.filter(r => r.onTime !== null).length;
+    const overallOnTimePct = overallOnTimeTotal > 0 ? Math.round((overallOnTimeCount / overallOnTimeTotal) * 1000) / 10 : 0;
+
     return {
       dimension: val,
       // Overall Combined
@@ -572,6 +597,9 @@ export function computeBreakdown(
       overallRFT:          totalRFT,
       overallNotRFT:       (blue.notRftCount + silver.notRftCount),
       overallRFTPct,
+      overallOnTimeCount,
+      overallOnTimeTotal,
+      overallOnTimePct,
       // Blue Seal
       blueSamples:   blue.totalRows,
       blueTotal:     blue.totalUniqueStyles,
@@ -581,6 +609,9 @@ export function computeBreakdown(
       blueApproved:  blue.approved,
       blueRejected:  blue.rejected,
       bluePending:   blue.pending,
+      blueOnTimeCount,
+      blueOnTimeTotal,
+      blueOnTimePct,
       // Silver Seal
       silverSamples:  silver.totalRows,
       silverTotal:    silver.totalUniqueStyles,
@@ -590,6 +621,9 @@ export function computeBreakdown(
       silverApproved: silver.approved,
       silverRejected: silver.rejected,
       silverPending:  silver.pending,
+      silverOnTimeCount,
+      silverOnTimeTotal,
+      silverOnTimePct,
     };
   });
 }

@@ -289,20 +289,26 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
     dimHeader,
     'Total Samples',
     'Unique Styles',
+    'Overall On-Time (Count)',
+    'Overall On-Time (%)',
     'Total Approved',
     'Total Rejected',
     'Total Pending',
     'Overall RFT (Count)',
     'Overall Not RFT',
     'Overall RFT (%)',
-    'Blue Samples',
+    'Blue Total Samples',
     'Blue Unique Styles',
+    'Blue On-Time (Count)',
+    'Blue On-Time (%)',
     'Blue Approved',
     'Blue Rejected',
     'Blue Pending',
     'Blue RFT (%)',
-    'Silver Samples',
+    'Silver Total Samples',
     'Silver Unique Styles',
+    'Silver On-Time (Count)',
+    'Silver On-Time (%)',
     'Silver Approved',
     'Silver Rejected',
     'Silver Pending',
@@ -316,6 +322,8 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
       r.dimension,
       r.overallSamples,
       r.overallUniqueStyles,
+      r.overallOnTimeCount,
+      Number(r.overallOnTimePct.toFixed(1)),
       r.overallApproved,
       r.overallRejected,
       r.overallPending,
@@ -324,12 +332,16 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
       Number(r.overallRFTPct.toFixed(1)),
       r.blueSamples,
       r.blueTotal,
+      r.blueOnTimeCount,
+      Number(r.blueOnTimePct.toFixed(1)),
       r.blueApproved,
       r.blueRejected,
       r.bluePending,
       Number(r.blueRFTPct.toFixed(1)),
       r.silverSamples,
       r.silverTotal,
+      r.silverOnTimeCount,
+      Number(r.silverOnTimePct.toFixed(1)),
       r.silverApproved,
       r.silverRejected,
       r.silverPending,
@@ -341,6 +353,10 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
   if (rows.length > 0) {
     const totalSamples = rows.reduce((acc, r) => acc + r.overallSamples, 0);
     const totalStyles = rows.reduce((acc, r) => acc + r.overallUniqueStyles, 0);
+    const totalOnTime = rows.reduce((acc, r) => acc + r.overallOnTimeCount, 0);
+    const totalOnTimeEval = rows.reduce((acc, r) => acc + r.overallOnTimeTotal, 0);
+    const overallOnTimePct = totalOnTimeEval > 0 ? Number(((totalOnTime / totalOnTimeEval) * 100).toFixed(1)) : 0;
+
     const totalApproved = rows.reduce((acc, r) => acc + r.overallApproved, 0);
     const totalRejected = rows.reduce((acc, r) => acc + r.overallRejected, 0);
     const totalPending = rows.reduce((acc, r) => acc + r.overallPending, 0);
@@ -350,6 +366,9 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
 
     const blueSamples = rows.reduce((acc, r) => acc + r.blueSamples, 0);
     const blueTotal = rows.reduce((acc, r) => acc + r.blueTotal, 0);
+    const blueOnTime = rows.reduce((acc, r) => acc + r.blueOnTimeCount, 0);
+    const blueOnTimeEval = rows.reduce((acc, r) => acc + r.blueOnTimeTotal, 0);
+    const blueOnTimePct = blueOnTimeEval > 0 ? Number(((blueOnTime / blueOnTimeEval) * 100).toFixed(1)) : 0;
     const blueApproved = rows.reduce((acc, r) => acc + r.blueApproved, 0);
     const blueRejected = rows.reduce((acc, r) => acc + r.blueRejected, 0);
     const bluePending = rows.reduce((acc, r) => acc + r.bluePending, 0);
@@ -358,6 +377,9 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
 
     const silverSamples = rows.reduce((acc, r) => acc + r.silverSamples, 0);
     const silverTotal = rows.reduce((acc, r) => acc + r.silverTotal, 0);
+    const silverOnTime = rows.reduce((acc, r) => acc + r.silverOnTimeCount, 0);
+    const silverOnTimeEval = rows.reduce((acc, r) => acc + r.silverOnTimeTotal, 0);
+    const silverOnTimePct = silverOnTimeEval > 0 ? Number(((silverOnTime / silverOnTimeEval) * 100).toFixed(1)) : 0;
     const silverApproved = rows.reduce((acc, r) => acc + r.silverApproved, 0);
     const silverRejected = rows.reduce((acc, r) => acc + r.silverRejected, 0);
     const silverPending = rows.reduce((acc, r) => acc + r.silverPending, 0);
@@ -368,6 +390,8 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
       'TOTAL / SUMMARY',
       totalSamples,
       totalStyles,
+      totalOnTime,
+      overallOnTimePct,
       totalApproved,
       totalRejected,
       totalPending,
@@ -376,12 +400,16 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
       overallRFTPct,
       blueSamples,
       blueTotal,
+      blueOnTime,
+      blueOnTimePct,
       blueApproved,
       blueRejected,
       bluePending,
       blueRFTPct,
       silverSamples,
       silverTotal,
+      silverOnTime,
+      silverOnTimePct,
       silverApproved,
       silverRejected,
       silverPending,
@@ -492,6 +520,10 @@ export function exportBreakdownToExcel({
   const totalRFT = rows.reduce((acc, r) => acc + r.overallRFT, 0);
   const overallRFTPct = totalStyles > 0 ? Number(((totalRFT / totalStyles) * 100).toFixed(1)) : 0;
 
+  const totalOnTime = rows.reduce((acc, r) => acc + r.overallOnTimeCount, 0);
+  const totalOnTimeEval = rows.reduce((acc, r) => acc + r.overallOnTimeTotal, 0);
+  const overallOnTimePct = totalOnTimeEval > 0 ? Number(((totalOnTime / totalOnTimeEval) * 100).toFixed(1)) : 0;
+
   const sortedByRFT = [...rows].filter(r => r.overallUniqueStyles > 0).sort((a, b) => b.overallRFTPct - a.overallRFTPct);
   const topGroup = sortedByRFT[0];
   const lowestGroup = sortedByRFT[sortedByRFT.length - 1];
@@ -504,6 +536,7 @@ export function exportBreakdownToExcel({
     ['Total Groups in Dimension', rows.length],
     ['Total Sample Submissions', totalSamples],
     ['Total Unique Styles', totalStyles],
+    ['Total Reviewed On-Time', `${totalOnTime} (${overallOnTimePct.toFixed(1)}%)`],
     ['Total Approved Styles', totalApproved],
     ['Total Rejected Styles', totalRejected],
     ['Overall RFT (%)', `${overallRFTPct}%`],

@@ -60,6 +60,37 @@ function PctBadge({ pct }: { pct: number }) {
   );
 }
 
+function OnTimeBadge({ count, total, pct }: { count: number; total: number; pct: number }) {
+  if (total === 0) {
+    return <span style={{ color: 'var(--text-subtle)', fontSize: '0.78rem' }}>—</span>;
+  }
+  const isHigh = pct >= 85;
+  const isMed = pct >= 65 && pct < 85;
+  const color = isHigh ? '#16a34a' : isMed ? '#d97706' : '#dc2626';
+  const bg = isHigh ? '#f0fdf4' : isMed ? '#fffbeb' : '#fef2f2';
+  const border = isHigh ? '#bbf7d0' : isMed ? '#fde68a' : '#fecaca';
+
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ fontWeight: 700, fontSize: '0.8125rem', color: 'var(--text-heading)' }}>{count.toLocaleString()}</span>
+      <span
+        style={{
+          fontSize: '0.72rem',
+          fontWeight: 800,
+          color,
+          background: bg,
+          border: `1px solid ${border}`,
+          padding: '1px 5px',
+          borderRadius: 5,
+        }}
+        title={`${count} of ${total} reviewed on time (${pct.toFixed(1)}%)`}
+      >
+        {pct.toFixed(0)}%
+      </span>
+    </div>
+  );
+}
+
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
     <span className={`sort-icon ${active ? 'active' : ''}`} style={{ marginLeft: 4 }}>
@@ -190,6 +221,10 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
     const totalRFT = rows.reduce((acc, r) => acc + r.overallRFT, 0);
     const overallRFT = totalUniqueStyles > 0 ? (totalRFT / totalUniqueStyles) * 100 : 0;
 
+    const totalOnTime = rows.reduce((acc, r) => acc + r.overallOnTimeCount, 0);
+    const totalOnTimeEval = rows.reduce((acc, r) => acc + r.overallOnTimeTotal, 0);
+    const overallOnTimePct = totalOnTimeEval > 0 ? (totalOnTime / totalOnTimeEval) * 100 : 0;
+
     const sortedByRFT = [...rows].filter(r => r.overallUniqueStyles > 0).sort((a, b) => b.overallRFTPct - a.overallRFTPct);
     const bestGroup = sortedByRFT[0];
     const lowestGroup = sortedByRFT[sortedByRFT.length - 1];
@@ -200,6 +235,8 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
       totalApproved,
       totalRejected,
       overallRFT,
+      totalOnTime,
+      overallOnTimePct,
       bestGroup,
       lowestGroup,
     };
@@ -312,19 +349,15 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
             <span className="summary-item-value">
               {summary.totalSamples.toLocaleString()}
             </span>
-            <span className="metric-sub">
-              {summary.totalUniqueStyles.toLocaleString()} unique styles
-            </span>
+            <span className="metric-sub">Total submissions</span>
           </div>
 
           <div className="summary-item">
-            <span className="summary-item-label">Overall Approvals</span>
-            <span className="summary-item-value" style={{ color: 'var(--green-text)' }}>
-              {summary.totalApproved.toLocaleString()}
+            <span className="summary-item-label">Unique Styles</span>
+            <span className="summary-item-value" style={{ color: 'var(--brand-600)' }}>
+              {summary.totalUniqueStyles.toLocaleString()}
             </span>
-            <span className="metric-sub">
-              {summary.totalRejected.toLocaleString()} rejections
-            </span>
+            <span className="metric-sub">Distinct style codes</span>
           </div>
 
           <div className="summary-item">
@@ -332,7 +365,15 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
             <span className="summary-item-value" style={{ color: summary.overallRFT >= 80 ? 'var(--green-text)' : '#f59e0b' }}>
               {summary.overallRFT.toFixed(1)}%
             </span>
-            <span className="metric-sub">First-time approval rate</span>
+            <span className="metric-sub">First-time approval</span>
+          </div>
+
+          <div className="summary-item">
+            <span className="summary-item-label">Reviewed On-Time</span>
+            <span className="summary-item-value" style={{ color: summary.overallOnTimePct >= 80 ? 'var(--green-text)' : '#f59e0b' }}>
+              {summary.overallOnTimePct.toFixed(1)}%
+            </span>
+            <span className="metric-sub">{summary.totalOnTime.toLocaleString()} on-time submissions</span>
           </div>
 
           {summary.bestGroup && (
@@ -407,11 +448,14 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
                 {/* COMBINED OVERALL COLUMNS */}
                 {(viewMode === 'all' || viewMode === 'combined') && (
                   <>
-                    <th onClick={() => handleSort('overallSamples')} style={{ cursor: 'pointer', background: 'rgba(15, 76, 129, 0.04)' }} title="Total sample rows evaluated in this drop/group">
+                    <th onClick={() => handleSort('overallSamples')} style={{ cursor: 'pointer', background: 'rgba(15, 76, 129, 0.04)' }} title="Total sample instances evaluated">
                       Total Samples <SortIcon active={sortKey === 'overallSamples'} dir={sortDir} />
                     </th>
-                    <th onClick={() => handleSort('overallUniqueStyles')} style={{ cursor: 'pointer', background: 'rgba(15, 76, 129, 0.04)' }} title="Count of distinct style codes">
+                    <th onClick={() => handleSort('overallUniqueStyles')} style={{ cursor: 'pointer', background: 'rgba(15, 76, 129, 0.04)' }} title="Distinct style codes">
                       Unique Styles <SortIcon active={sortKey === 'overallUniqueStyles'} dir={sortDir} />
+                    </th>
+                    <th onClick={() => handleSort('overallOnTimePct')} style={{ cursor: 'pointer', background: 'rgba(15, 76, 129, 0.04)' }} title="Overall Reviewed On-Time rate">
+                      On-Time Compliance <SortIcon active={sortKey === 'overallOnTimePct'} dir={sortDir} />
                     </th>
                     <th onClick={() => handleSort('overallApproved')} style={{ cursor: 'pointer', color: 'var(--green-text)', background: 'rgba(15, 76, 129, 0.04)' }}>
                       Approved <SortIcon active={sortKey === 'overallApproved'} dir={sortDir} />
@@ -428,20 +472,23 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
                 {/* BLUE SEAL COLUMNS */}
                 {(viewMode === 'all' || viewMode === 'blue') && (
                   <>
-                    <th onClick={() => handleSort('blueSamples')} style={{ color: 'var(--blue-seal)', cursor: 'pointer' }} title="Total Blue Seal submission instances">
-                      Blue Samples <SortIcon active={sortKey === 'blueSamples'} dir={sortDir} />
+                    <th onClick={() => handleSort('blueSamples')} style={{ color: 'var(--blue-seal)', cursor: 'pointer' }} title="Total Blue Seal sample instances">
+                      BS Total Samples <SortIcon active={sortKey === 'blueSamples'} dir={sortDir} />
                     </th>
                     <th onClick={() => handleSort('blueTotal')} style={{ color: 'var(--blue-seal)', cursor: 'pointer' }} title="Unique Blue Seal styles">
-                      Blue Styles <SortIcon active={sortKey === 'blueTotal'} dir={sortDir} />
+                      BS Unique Styles <SortIcon active={sortKey === 'blueTotal'} dir={sortDir} />
+                    </th>
+                    <th onClick={() => handleSort('blueOnTimePct')} style={{ color: 'var(--blue-seal)', cursor: 'pointer' }} title="Blue Seal reviewed on time count & percentage">
+                      BS On-Time <SortIcon active={sortKey === 'blueOnTimePct'} dir={sortDir} />
                     </th>
                     <th onClick={() => handleSort('blueApproved')} style={{ color: 'var(--blue-seal)', cursor: 'pointer' }}>
-                      Blue Appr <SortIcon active={sortKey === 'blueApproved'} dir={sortDir} />
+                      BS Appr <SortIcon active={sortKey === 'blueApproved'} dir={sortDir} />
                     </th>
                     <th onClick={() => handleSort('blueRejected')} style={{ color: 'var(--blue-seal)', cursor: 'pointer' }}>
-                      Blue Rej <SortIcon active={sortKey === 'blueRejected'} dir={sortDir} />
+                      BS Rej <SortIcon active={sortKey === 'blueRejected'} dir={sortDir} />
                     </th>
                     <th onClick={() => handleSort('blueRFTPct')} style={{ color: 'var(--blue-seal)', cursor: 'pointer' }}>
-                      Blue RFT% <SortIcon active={sortKey === 'blueRFTPct'} dir={sortDir} />
+                      BS RFT% <SortIcon active={sortKey === 'blueRFTPct'} dir={sortDir} />
                     </th>
                   </>
                 )}
@@ -449,20 +496,23 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
                 {/* SILVER SEAL COLUMNS */}
                 {(viewMode === 'all' || viewMode === 'silver') && (
                   <>
-                    <th onClick={() => handleSort('silverSamples')} style={{ color: 'var(--silver-seal)', cursor: 'pointer' }} title="Total Silver Seal submission instances">
-                      Silver Samples <SortIcon active={sortKey === 'silverSamples'} dir={sortDir} />
+                    <th onClick={() => handleSort('silverSamples')} style={{ color: 'var(--silver-seal)', cursor: 'pointer' }} title="Total Silver Seal sample instances">
+                      SS Total Samples <SortIcon active={sortKey === 'silverSamples'} dir={sortDir} />
                     </th>
                     <th onClick={() => handleSort('silverTotal')} style={{ color: 'var(--silver-seal)', cursor: 'pointer' }} title="Unique Silver Seal styles">
-                      Silver Styles <SortIcon active={sortKey === 'silverTotal'} dir={sortDir} />
+                      SS Unique Styles <SortIcon active={sortKey === 'silverTotal'} dir={sortDir} />
+                    </th>
+                    <th onClick={() => handleSort('silverOnTimePct')} style={{ color: 'var(--silver-seal)', cursor: 'pointer' }} title="Silver Seal reviewed on time count & percentage">
+                      SS On-Time <SortIcon active={sortKey === 'silverOnTimePct'} dir={sortDir} />
                     </th>
                     <th onClick={() => handleSort('silverApproved')} style={{ color: 'var(--silver-seal)', cursor: 'pointer' }}>
-                      Silver Appr <SortIcon active={sortKey === 'silverApproved'} dir={sortDir} />
+                      SS Appr <SortIcon active={sortKey === 'silverApproved'} dir={sortDir} />
                     </th>
                     <th onClick={() => handleSort('silverRejected')} style={{ color: 'var(--silver-seal)', cursor: 'pointer' }}>
-                      Silver Rej <SortIcon active={sortKey === 'silverRejected'} dir={sortDir} />
+                      SS Rej <SortIcon active={sortKey === 'silverRejected'} dir={sortDir} />
                     </th>
                     <th onClick={() => handleSort('silverRFTPct')} style={{ color: 'var(--silver-seal)', cursor: 'pointer' }}>
-                      Silver RFT% <SortIcon active={sortKey === 'silverRFTPct'} dir={sortDir} />
+                      SS RFT% <SortIcon active={sortKey === 'silverRFTPct'} dir={sortDir} />
                     </th>
                   </>
                 )}
@@ -471,7 +521,7 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
             <tbody>
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={15}>
+                  <td colSpan={18}>
                     <div className="empty-state">
                       <strong>No matching {dimLabel.toLowerCase()} found</strong>
                       <span style={{ fontSize: '0.8125rem' }}>Try searching with a different term.</span>
@@ -501,6 +551,9 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
                             {r.overallUniqueStyles.toLocaleString()}
                           </span>
                         </td>
+                        <td style={{ background: 'rgba(15, 76, 129, 0.02)' }}>
+                          <OnTimeBadge count={r.overallOnTimeCount} total={r.overallOnTimeTotal} pct={r.overallOnTimePct} />
+                        </td>
                         <td style={{ color: 'var(--green-text)', fontWeight: 700, background: 'rgba(15, 76, 129, 0.02)' }}>
                           {r.overallApproved.toLocaleString()}
                         </td>
@@ -526,6 +579,9 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
                             {r.blueTotal.toLocaleString()}
                           </span>
                         </td>
+                        <td>
+                          <OnTimeBadge count={r.blueOnTimeCount} total={r.blueOnTimeTotal} pct={r.blueOnTimePct} />
+                        </td>
                         <td style={{ color: 'var(--green-text)', fontWeight: 600 }}>{r.blueApproved.toLocaleString()}</td>
                         <td style={{ color: r.blueRejected > 0 ? 'var(--red-text)' : 'var(--text-muted)', fontWeight: 600 }}>{r.blueRejected.toLocaleString()}</td>
                         <td>
@@ -546,6 +602,9 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
                           <span style={{ fontWeight: 600, color: 'var(--text-heading)' }}>
                             {r.silverTotal.toLocaleString()}
                           </span>
+                        </td>
+                        <td>
+                          <OnTimeBadge count={r.silverOnTimeCount} total={r.silverOnTimeTotal} pct={r.silverOnTimePct} />
                         </td>
                         <td style={{ color: 'var(--green-text)', fontWeight: 600 }}>{r.silverApproved.toLocaleString()}</td>
                         <td style={{ color: r.silverRejected > 0 ? 'var(--red-text)' : 'var(--text-muted)', fontWeight: 600 }}>{r.silverRejected.toLocaleString()}</td>
