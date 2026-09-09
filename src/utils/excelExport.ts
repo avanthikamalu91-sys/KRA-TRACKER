@@ -1,7 +1,7 @@
 // src/utils/excelExport.ts – Styled Excel workbook exporter matching Pivot Table matrix format
 import * as XLSX from 'xlsx-js-style';
 import type { BreakdownRow, NormalizedRow, ActiveFilters } from './dataUtils';
-import { applyFilters, naturalSortCompare } from './dataUtils';
+import { applyFilters, naturalSortCompare, dropSortCompare } from './dataUtils';
 
 interface ExportBreakdownOptions {
   rows: BreakdownRow[];
@@ -40,8 +40,8 @@ function buildStyledPivotMatrixSheet(
   rows: NormalizedRow[],
   dimension: 'department' | 'brand' | 'season' = 'department'
 ): XLSX.WorkSheet {
-  // 1. Get unique drops in natural sorted order
-  const drops = [...new Set(rows.map(r => r.drop?.trim()).filter(Boolean))].sort(naturalSortCompare) as string[];
+  // 1. Get unique drops in proper order: Carry Over first, then Drop 1 to Drop X numerically
+  const drops = [...new Set(rows.map(r => r.drop?.trim()).filter(Boolean))].sort(dropSortCompare) as string[];
 
   // 2. Get unique dimension categories (e.g. Departments)
   const dimValues = [...new Set(rows.map(r => r[dimension]?.trim()).filter(Boolean))].sort(naturalSortCompare) as string[];

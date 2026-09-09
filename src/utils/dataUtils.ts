@@ -392,12 +392,54 @@ export function naturalSortCompare(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 }
 
+/**
+ * Specialized Drop Comparator:
+ * 1. "Carry Over" drops appear first (e.g. Carry Over, Carry Over 1, Carry Over 2...)
+ * 2. Numbered Drops appear next in true numeric order: Drop 1, Drop 2, ... Drop 9, Drop 10, Drop 11, Drop X
+ * 3. Any non-standard drops appear after in natural alphanumeric order.
+ */
+export function dropSortCompare(a: string, b: string): number {
+  const normA = (a || '').trim();
+  const normB = (b || '').trim();
+
+  const isCarryOverA = /^(?:carry\s*over|carryover|co\b)/i.test(normA);
+  const isCarryOverB = /^(?:carry\s*over|carryover|co\b)/i.test(normB);
+
+  if (isCarryOverA && !isCarryOverB) return -1;
+  if (!isCarryOverA && isCarryOverB) return 1;
+  if (isCarryOverA && isCarryOverB) {
+    const numA = (normA.match(/\d+/) || [])[0];
+    const numB = (normB.match(/\d+/) || [])[0];
+    if (numA && numB && Number(numA) !== Number(numB)) {
+      return Number(numA) - Number(numB);
+    }
+    return normA.localeCompare(normB, undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  // Check for standard numbered Drop (e.g. Drop 1, Drop 2, Drop 10, Drop 14)
+  const dropMatchA = normA.match(/^(?:drop|d)\s*(\d+)/i);
+  const dropMatchB = normB.match(/^(?:drop|d)\s*(\d+)/i);
+
+  if (dropMatchA && dropMatchB) {
+    const numA = Number(dropMatchA[1]);
+    const numB = Number(dropMatchB[1]);
+    if (numA !== numB) return numA - numB;
+    return normA.localeCompare(normB, undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  if (dropMatchA && !dropMatchB) return -1;
+  if (!dropMatchA && dropMatchB) return 1;
+
+  // Fallback to natural numeric sort
+  return normA.localeCompare(normB, undefined, { numeric: true, sensitivity: 'base' });
+}
+
 // ── Extract filter options ──────────────────────────────────
 export function extractFilterOptions(rows: NormalizedRow[]): FilterOptions {
   const depts   = [...new Set(rows.map(r => r.department).filter(Boolean))].sort(naturalSortCompare);
   const brands  = [...new Set(rows.map(r => r.brand).filter(Boolean))].sort(naturalSortCompare);
   const seasons = [...new Set(rows.map(r => r.season).filter(Boolean))].sort(naturalSortCompare);
-  const drops   = [...new Set(rows.map(r => r.drop).filter(Boolean))].sort(naturalSortCompare);
+  const drops   = [...new Set(rows.map(r => r.drop).filter(Boolean))].sort(dropSortCompare);
   const allDates = rows
     .flatMap(r => [r.date, r.receivedAtTechDate, r.deadlineDate])
     .filter(Boolean) as string[];
@@ -559,7 +601,9 @@ export function computeBreakdown(
   filters: ActiveFilters
 ): BreakdownRow[] {
   const filtered = applyFilters(rows, filters);
-  const values   = [...new Set(filtered.map(r => r[dimension]).filter(Boolean))].sort(naturalSortCompare) as string[];
+  const values   = [...new Set(filtered.map(r => r[dimension]).filter(Boolean))].sort(
+    dimension === 'drop' ? dropSortCompare : naturalSortCompare
+  ) as string[];
 
   return values.map(val => {
     const dimRows = filtered.filter(r => r[dimension] === val);
