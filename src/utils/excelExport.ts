@@ -659,7 +659,7 @@ export function exportBreakdownToExcel({
 
   const summarySheetData = [
     ['Metric', 'Value'],
-    ['Report Title', 'KRA Tracker - Performance & Drop Breakdown'],
+    ['Report Title', 'Z - TRACK - Performance & Drop Breakdown'],
     ['Export Date & Time', new Date().toLocaleString()],
     ['Active Dimension', activeDimTitle],
     ['Total Groups in Dimension', rows.length],
@@ -720,6 +720,6 @@ export function exportBreakdownToExcel({
 
   // Trigger Excel file download in browser
   const dateStr = new Date().toISOString().slice(0, 10);
-  const finalFileName = fileName || `KRA_Breakdown_Matrix_${dimension}_${dateStr}.xlsx`;
+  const finalFileName = fileName || `Z_TRACK_Breakdown_Matrix_${dimension}_${dateStr}.xlsx`;
   XLSX.writeFile(wb, finalFileName);
 }

@@ -247,10 +247,13 @@ export default function App() {
         <div className="sidebar-logo">
           <img
             src="/logo.jpg"
-            alt="KRA Tracker"
+            alt="Z - TRACK Logo"
             className="sidebar-logo-img"
           />
-          <span className="sidebar-logo-text">KRA Tracker</span>
+          <span className="sidebar-logo-text">
+            Z - TRACK
+            <span className="sidebar-logo-sub">ZUDIO QUALITY</span>
+          </span>
           <button
             type="button"
             className="mobile-close-btn"
