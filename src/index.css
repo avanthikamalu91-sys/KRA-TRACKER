@@ -192,10 +192,11 @@ body {
 }
 
 .sidebar-logo-text {
-  font-size: 1.25rem;
-  font-weight: 900;
+  font-family: 'Comfortaa', 'Plus Jakarta Sans', sans-serif;
+  font-size: 1.32rem;
+  font-weight: 700;
   color: var(--text-heading);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   text-align: center;
   line-height: 1.1;
   margin: 0 auto;
