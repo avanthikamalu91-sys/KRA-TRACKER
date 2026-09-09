@@ -1,11 +1,14 @@
 // BreakdownTable.tsx – Highly Aesthetic Department / Brand / Season / Drop Performance Breakdown
 import React, { useState, useMemo } from 'react';
-import type { BreakdownRow } from '../utils/dataUtils';
+import type { BreakdownRow, NormalizedRow, ActiveFilters } from '../utils/dataUtils';
+import { exportBreakdownToExcel } from '../utils/excelExport';
 
 interface Props {
   rows: BreakdownRow[];
   dimension: 'department' | 'brand' | 'season' | 'drop';
   onDimensionChange: (dim: 'department' | 'brand' | 'season' | 'drop') => void;
+  allRows?: NormalizedRow[];
+  filters?: ActiveFilters;
 }
 
 type SortKey = keyof BreakdownRow;
@@ -65,12 +68,30 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   );
 }
 
-export default function BreakdownTable({ rows, dimension, onDimensionChange }: Props) {
+export default function BreakdownTable({ rows, dimension, onDimensionChange, allRows, filters }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('overallSamples');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [page, setPage] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportExcel = () => {
+    setIsExporting(true);
+    try {
+      exportBreakdownToExcel({
+        rows,
+        dimension,
+        allRows,
+        filters,
+      });
+    } catch (e) {
+      console.error('Failed to export Excel:', e);
+      alert('Failed to export Excel. Please try again.');
+    } finally {
+      setTimeout(() => setIsExporting(false), 600);
+    }
+  };
 
   const dims: { val: 'department' | 'brand' | 'season' | 'drop'; label: string; icon: React.ReactNode }[] = [
     {
@@ -338,9 +359,41 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange }: P
             value={search}
             onChange={handleSearch}
           />
-          <span className="table-count">
-            {sorted.length} of {rows.length} {dimLabel.toLowerCase()} groups · page {page} of {totalPages}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span className="table-count">
+              {sorted.length} of {rows.length} {dimLabel.toLowerCase()} groups · page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              id="btn-export-breakdown-excel"
+              className="btn btn-sm"
+              onClick={handleExportExcel}
+              disabled={isExporting}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                fontWeight: 700,
+                fontSize: '0.8125rem',
+                color: '#15803d',
+                borderColor: '#86efac',
+                background: '#f0fdf4',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.18s ease',
+                boxShadow: '0 1px 3px rgba(22, 163, 74, 0.1)',
+              }}
+              title="Export complete breakdown summaries to Excel (.xlsx)"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              {isExporting ? 'Exporting…' : 'Export Excel (.xlsx)'}
+            </button>
+          </div>
         </div>
 
         <div style={{ overflowX: 'auto' }}>

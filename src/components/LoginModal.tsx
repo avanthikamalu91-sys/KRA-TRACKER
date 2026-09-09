@@ -94,12 +94,12 @@ export default function LoginModal({ isOpen, onClose, currentUser, onLogin, onLo
         {/* Header */}
         <div className="login-modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div className="sidebar-logo-icon" style={{ width: 38, height: 38 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                <circle cx="12" cy="7" r="4"/>
-              </svg>
-            </div>
+            <img
+              src="/logo.jpg"
+              alt="KRA Tracker Logo"
+              className="sidebar-logo-img"
+              style={{ width: 38, height: 38 }}
+            />
             <div>
               <h3 className="login-modal-title">
                 {currentUser.isLoggedIn ? 'Account Profile' : 'Sign In to Tech Analysis'}

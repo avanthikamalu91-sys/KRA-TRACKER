@@ -34,18 +34,32 @@ interface Props {
 export default function LoginPage({ onLogin, onCancel }: Props) {
   const [activeRole, setActiveRole] = useState<RoleKey>('ADMIN');
   const [email, setEmail] = useState(PRESET_ACCOUNTS.ADMIN.email);
-  const [password, setPassword] = useState(PRESET_ACCOUNTS.ADMIN.password);
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const handleRoleSelect = (roleKey: RoleKey) => {
     setActiveRole(roleKey);
     setEmail(PRESET_ACCOUNTS[roleKey].email);
-    setPassword(PRESET_ACCOUNTS[roleKey].password);
+    setPassword('');
+    setErrorMsg('');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const current = PRESET_ACCOUNTS[activeRole];
+
+    if (!password.trim()) {
+      setErrorMsg('Please enter your password to sign in.');
+      return;
+    }
+
+    if (password.trim() !== current.password) {
+      setErrorMsg(`Incorrect password for ${current.role}. Please check your credentials.`);
+      return;
+    }
+
+    setErrorMsg('');
     onLogin({
       name: current.name,
       role: current.role,
@@ -72,57 +86,16 @@ export default function LoginPage({ onLogin, onCancel }: Props) {
       {/* ── Left Side: White Floating Card with Custom KRA Tracker Logo ── */}
       <div className="kra-left-side">
         <div className="kra-brand-card">
-          {/* Custom 3D Isometric Geometric KRA Emblem */}
+          {/* Custom KRA Tracker Logo */}
           <div className="kra-logo-wrap">
-            <svg width="190" height="190" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <linearGradient id="kraGradTop" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#38bdf8" />
-                  <stop offset="100%" stopColor="#0284c7" />
-                </linearGradient>
-                <linearGradient id="kraGradLeft" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#0f4c81" />
-                  <stop offset="100%" stopColor="#06192d" />
-                </linearGradient>
-                <linearGradient id="kraGradRight" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#2563eb" />
-                  <stop offset="100%" stopColor="#1d4ed8" />
-                </linearGradient>
-                <linearGradient id="kraGradAccent" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#06b6d4" />
-                  <stop offset="100%" stopColor="#0284c7" />
-                </linearGradient>
-              </defs>
-
-              {/* Central 3D Geometric Isometric Emblem */}
-              {/* TOP CUBE / DIAMOND */}
-              <g transform="translate(0, -10)">
-                <polygon points="100,20 140,42 100,66 60,42" fill="url(#kraGradTop)" />
-                <polygon points="60,42 100,66 100,110 60,86" fill="url(#kraGradLeft)" />
-                <polygon points="100,66 140,42 140,86 100,110" fill="url(#kraGradRight)" />
-              </g>
-
-              {/* BOTTOM LEFT CUBE */}
-              <g transform="translate(-40, 56)">
-                <polygon points="100,20 140,42 100,66 60,42" fill="#1e293b" />
-                <polygon points="60,42 100,66 100,110 60,86" fill="#0f172a" />
-                <polygon points="100,66 140,42 140,86 100,110" fill="#334155" />
-              </g>
-
-              {/* BOTTOM RIGHT CUBE */}
-              <g transform="translate(40, 56)">
-                <polygon points="100,20 140,42 100,66 60,42" fill="url(#kraGradAccent)" />
-                <polygon points="60,42 100,66 100,110 60,86" fill="#0369a1" />
-                <polygon points="100,66 140,42 140,86 100,110" fill="#0284c7" />
-              </g>
-
-              {/* Overlay K/Pulse Tech Marks */}
-              <circle cx="100" cy="98" r="5" fill="#38bdf8" />
-            </svg>
+            <img
+              src="/logo.jpg"
+              alt="KRA Tracker Logo"
+              className="kra-logo-img"
+            />
           </div>
 
           <h1 className="kra-brand-title">KRA Tracker</h1>
-          <p className="kra-brand-tagline">Key Result Areas & Sample Performance</p>
         </div>
       </div>
 
@@ -163,13 +136,27 @@ export default function LoginPage({ onLogin, onCancel }: Props) {
 
           {/* Form Inputs */}
           <form onSubmit={handleSubmit} className="kra-inputs-form">
+            {errorMsg && (
+              <div className="kra-error-alert">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
             <div className="kra-input-wrap">
               <input
                 type="email"
                 className="kra-input"
                 placeholder="Email Address"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={e => {
+                  setEmail(e.target.value);
+                  setErrorMsg('');
+                }}
                 required
               />
             </div>
@@ -180,8 +167,12 @@ export default function LoginPage({ onLogin, onCancel }: Props) {
                 className="kra-input"
                 placeholder="Password"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={e => {
+                  setPassword(e.target.value);
+                  setErrorMsg('');
+                }}
                 required
+                autoFocus
               />
               <button
                 type="button"
@@ -199,12 +190,20 @@ export default function LoginPage({ onLogin, onCancel }: Props) {
             <button type="submit" className="kra-submit-btn">
               SIGN IN
             </button>
-          </form>
 
-          {/* Bottom Footer Text */}
-          <div className="kra-footer-text">
-            KRA TRACKER · TECHNICAL & QUALITY SERVICES
-          </div>
+            {/* Quick Credentials Info Box */}
+            <div className="kra-cred-hint">
+              <div style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: 2 }}>
+                Login Credentials:
+              </div>
+              <div>
+                <strong>ADMIN:</strong> admin@kratracker.com / <strong>admin@2026</strong>
+              </div>
+              <div>
+                <strong>TECHNOLOGIST:</strong> tech@kratracker.com / <strong>tech@2026</strong>
+              </div>
+            </div>
+          </form>
         </div>
       </div>
     </div>

@@ -234,6 +234,8 @@ export default function FilterBar({ options, filters, onChange, rows }: Props) {
     (filters.startDate && filters.startDate !== options.minDate) ||
     (filters.endDate && filters.endDate !== options.maxDate);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const hasActive =
     filters.department !== '' ||
     filters.brand !== '' ||
@@ -241,14 +243,18 @@ export default function FilterBar({ options, filters, onChange, rows }: Props) {
     filters.drop !== '' ||
     isCustomDateRange;
 
-  const reset = () => onChange({
-    department: '',
-    brand: '',
-    season: '',
-    drop: '',
-    startDate: options.minDate || '',
-    endDate: options.maxDate || '',
-  });
+  const reset = () => {
+    setIsRefreshing(true);
+    onChange({
+      department: '',
+      brand: '',
+      season: '',
+      drop: '',
+      startDate: options.minDate || '',
+      endDate: options.maxDate || '',
+    });
+    setTimeout(() => setIsRefreshing(false), 450);
+  };
 
   const handleDepartmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newDept = e.target.value;
@@ -357,50 +363,23 @@ export default function FilterBar({ options, filters, onChange, rows }: Props) {
             availableYears={availableYears}
           />
         </div>
-      </div>
 
-      {hasActive && (
-        <>
-          <div className="filter-divider" />
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-            {filters.department && (
-              <span className="active-filter-pill">{filters.department}</span>
-            )}
-            {filters.brand && (
-              <span className="active-filter-pill">{filters.brand}</span>
-            )}
-            {filters.season && (
-              <span className="active-filter-pill">{filters.season}</span>
-            )}
-            {filters.drop && (
-              <span className="active-filter-pill">{filters.drop}</span>
-            )}
-            {isCustomDateRange && (
-              <span className="active-filter-pill" style={{ background: '#e8f1f8', color: '#0f4c81', borderColor: '#b8d5ed', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                  <line x1="16" y1="2" x2="16" y2="6"/>
-                  <line x1="8" y1="2" x2="8" y2="6"/>
-                  <line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
-                <span>{formatDateDisplay(activeStartDate)} → {formatDateDisplay(activeEndDate)}</span>
-              </span>
-            )}
-          </div>
-          <button
-            id="btn-reset-filters"
-            className="btn btn-ghost btn-sm"
-            onClick={reset}
-            title="Reset all filters to defaults"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="1 4 1 10 7 10"/>
-              <path d="M3.51 15a9 9 0 1 0 .49-3.5"/>
-            </svg>
-            Reset
-          </button>
-        </>
-      )}
+        {/* Refresh / Reset Button (Icon-only) */}
+        <button
+          type="button"
+          id="btn-refresh-filters"
+          className={`filter-refresh-btn ${hasActive ? 'has-active' : ''} ${isRefreshing ? 'spinning' : ''}`}
+          onClick={reset}
+          title="Reset all filters back to All"
+          aria-label="Reset all filters"
+        >
+          <svg className="filter-refresh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="23 4 23 10 17 10" />
+            <polyline points="1 20 1 14 7 14" />
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

@@ -261,13 +261,11 @@ export default function App() {
       <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         {/* Logo */}
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="12 2 2 7 12 12 22 7 12 2"/>
-              <polyline points="2 17 12 22 22 17"/>
-              <polyline points="2 12 12 17 22 12"/>
-            </svg>
-          </div>
+          <img
+            src="/logo.jpg"
+            alt="KRA Tracker"
+            className="sidebar-logo-img"
+          />
           <span className="sidebar-logo-text">KRA Tracker</span>
           <button
             type="button"
@@ -627,6 +625,8 @@ export default function App() {
                   rows={breakdownRows}
                   dimension={breakdownDim}
                   onDimensionChange={setBreakdownDim}
+                  allRows={rows}
+                  filters={filters}
                 />
               )}
               {activeNav === 'tracking' && (

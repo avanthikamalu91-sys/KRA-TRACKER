@@ -354,9 +354,6 @@ export default function SampleTracking({ rows, filters }: Props) {
               </svg>
               Sample Tracking &amp; On-Time Compliance
             </div>
-            <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.8125rem', marginTop: 3 }}>
-              Tracking sample deadlines across 3 options: On Time (True), Late (False), and Not Received / Pending (No True/False).
-            </div>
           </div>
 
           <div style={{
