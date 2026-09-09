@@ -245,12 +245,14 @@ export default function App() {
       <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         {/* Logo */}
         <div className="sidebar-logo">
-          <img
-            src="/image.png"
-            alt="Z - TRACK"
-            className="sidebar-logo-img"
-          />
-          <span className="sidebar-logo-text">Z - TRACK</span>
+          <div className="sidebar-brand-block">
+            <span className="sidebar-logo-text">Z - TRACK</span>
+            <img
+              src="/image.png"
+              alt="Z - TRACK Logo"
+              className="sidebar-logo-img"
+            />
+          </div>
           <button
             type="button"
             className="mobile-close-btn"

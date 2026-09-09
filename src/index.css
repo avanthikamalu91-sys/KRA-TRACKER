@@ -148,11 +148,18 @@ body {
 
 .sidebar-logo {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 8px 22px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 8px 10px 18px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 22px;
+  margin-bottom: 20px;
+}
+
+.sidebar-brand-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .sidebar-logo-icon {
@@ -166,22 +173,23 @@ body {
 }
 
 .sidebar-logo-img {
-  height: 32px;
+  height: 28px;
   width: auto;
-  max-width: 90px;
+  max-width: 95px;
   border-radius: 6px;
   object-fit: contain;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   background: #000000;
-  padding: 3px 6px;
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .sidebar-logo-text {
-  font-size: 1.05rem;
-  font-weight: 800;
+  font-size: 1.15rem;
+  font-weight: 900;
   color: var(--text-heading);
-  letter-spacing: -0.025em;
+  letter-spacing: 0.04em;
   display: flex;
   flex-direction: column;
   line-height: 1.1;
