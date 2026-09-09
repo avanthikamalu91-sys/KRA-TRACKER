@@ -10,7 +10,6 @@ import VendorPerformance from './components/VendorPerformance';
 import PendingSamples from './components/PendingSamples';
 import SampleTracking from './components/SampleTracking';
 import RejectionAnalysis from './components/RejectionAnalysis';
-import LoginPage, { type UserProfile } from './components/LoginPage';
 import { parseExcelFile, isParseError } from './utils/excelParser';
 import {
   normalizeRows,
@@ -99,7 +98,7 @@ function IconSettings() {
   return (
     <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="3"/>
-      <path d="M19.07 4.93a10 10 0 0 1 1.5 2.6l-1.54.83a1 1 0 0 0 0 1.74l1.54.83a10 10 0 0 1 0 3l-1.54.83a1 1 0 0 0 0 1.74l1.54.83a10 10 0 0 1-1.5 2.6l-1.54-.83a1 1 0 0 0-1.5.87v1.66a10 10 0 0 1-3 0v-1.66a1 1 0 0 0-1.5-.87l-1.54.83a10 10 0 0 1-1.5-2.6l1.54-.83a1 1 0 0 0 0-1.74l-1.54-.83a10 10 0 0 1 0-3l1.54-.83a1 1 0 0 0 0-1.74l-1.54-.83a10 10 0 0 1 1.5-2.6l1.54.83a1 1 0 0 0 1.5-.87V3.4a10 10 0 0 1 3 0v1.66a1 1 0 0 0 1.5.87z"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
     </svg>
   );
 }
@@ -191,13 +190,11 @@ export default function App() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const [showLoginPage, setShowLoginPage] = useState(false);
-  const [currentUser,   setCurrentUser]   = useState<UserProfile>({
-    name: 'System Administrator',
-    role: 'Admin',
+  const currentUser = {
+    name: 'Technical & Quality Team',
+    role: 'Quality Administrator',
     email: 'admin@kratracker.com',
-    isLoggedIn: false, // Login page is the first page shown on startup!
-  });
+  };
 
   const navItems: { id: NavItem; label: string; icon: React.ReactNode; disabled?: boolean }[] = [
     { id: 'overview',  label: 'Overview',           icon: <IconGrid /> },
@@ -224,19 +221,6 @@ export default function App() {
     if (maxD) return formatDateDisplay(maxD);
     return 'All Dates';
   }, [rows.length, filterOpts.minDate, filterOpts.maxDate, filters.startDate, filters.endDate]);
-
-  if (showLoginPage || !currentUser.isLoggedIn) {
-    return (
-      <LoginPage
-        onLogin={(user) => {
-          setCurrentUser(user);
-          setShowLoginPage(false);
-        }}
-        currentUser={currentUser}
-        onCancel={currentUser.isLoggedIn ? () => setShowLoginPage(false) : undefined}
-      />
-    );
-  }
 
   const handleNavClick = (id: NavItem) => {
     setActiveNav(id);
@@ -345,22 +329,6 @@ export default function App() {
               Export PDF
             </button>
           )}
-          <button
-            className="nav-item"
-            onClick={() => {
-              setMobileMenuOpen(false);
-              setCurrentUser(prev => ({ ...prev, isLoggedIn: false }));
-              setShowLoginPage(true);
-            }}
-            title="Switch account or logout"
-          >
-            <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-            Logout / Switch
-          </button>
         </nav>
 
         <div className="sidebar-spacer" />
@@ -437,7 +405,7 @@ export default function App() {
                 Export PDF
               </button>
             )}
-            <div className="topbar-user" onClick={() => setShowLoginPage(true)} title="Account Profile">
+            <div className="topbar-user" title="Technical & Quality Team">
               <div className="topbar-avatar">{currentUser.name.slice(0, 2).toUpperCase()}</div>
               <div className="topbar-user-info">
                 <span className="topbar-user-name">{currentUser.name}</span>

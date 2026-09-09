@@ -693,11 +693,18 @@ export function exportBreakdownToExcel({
           font: { name: FONT_FAMILY, sz: 10.5, bold: true, color: { rgb: PALETTE.white } },
           fill: { fgColor: { rgb: PALETTE.navyHeader } },
           alignment: { vertical: 'center', horizontal: 'left' },
+          border: {
+            top: { style: 'thin', color: { rgb: PALETTE.navyHeader } },
+            bottom: { style: 'medium', color: { rgb: '0369A1' } },
+            left: { style: 'thin', color: { rgb: '1E3A8A' } },
+            right: { style: 'thin', color: { rgb: '1E3A8A' } },
+          },
         };
       } else {
         cell.s = {
           font: { name: FONT_FAMILY, sz: 10, bold: c === 0, color: { rgb: '1E293B' } },
           fill: { fgColor: { rgb: r % 2 === 0 ? 'F8FAFC' : PALETTE.white } },
+          alignment: { vertical: 'center', horizontal: 'left' },
           border: {
             top: { style: 'thin', color: { rgb: 'E2E8F0' } },
             bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
