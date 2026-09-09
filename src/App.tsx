@@ -355,14 +355,21 @@ export default function App() {
 
             <div>
               <div className="topbar-title">
-                {activeNav === 'overview'  && 'Performance Overview'}
-                {activeNav === 'tracking'  && 'Sample Tracking'}
-                {activeNav === 'rejection' && 'Rejection Analysis & Defect Breakdown'}
-                {activeNav === 'pending'   && 'Pending Samples'}
-                {activeNav === 'vendor'    && 'Vendor Performance'}
-                {activeNav === 'breakdown' && 'Performance Breakdown'}
-                {activeNav === 'detail'    && 'Style Detail Analysis'}
-                {appState !== 'ready'      && 'Performance Overview'}
+                {appState !== 'ready'
+                  ? 'Performance Overview'
+                  : activeNav === 'overview'
+                  ? 'Performance Overview'
+                  : activeNav === 'tracking'
+                  ? 'Sample Tracking'
+                  : activeNav === 'rejection'
+                  ? 'Rejection Analysis & Defect Breakdown'
+                  : activeNav === 'pending'
+                  ? 'Pending Samples'
+                  : activeNav === 'vendor'
+                  ? 'Vendor Performance'
+                  : activeNav === 'breakdown'
+                  ? 'Performance Breakdown'
+                  : 'Style Detail Analysis'}
               </div>
               <div className="topbar-subtitle">
                 {appState === 'ready' ? (
