@@ -635,7 +635,7 @@ export function exportBreakdownToExcel({
     department: 'Department',
     brand: 'Brand & Division',
     season: 'Season',
-    drop: 'Drop & Phase',
+    drop: 'Drop',
   };
   const activeDimTitle = dimNames[dimension] || dimension;
   const wsTabular = buildStyledTabularSheet(rows, activeDimTitle);
