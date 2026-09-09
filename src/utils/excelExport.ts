@@ -47,7 +47,20 @@ function buildStyledPivotMatrixSheet(
   const dimValues = [...new Set(rows.map(r => r[dimension]?.trim()).filter(Boolean))].sort(naturalSortCompare) as string[];
 
   const aoa: (string | number | null)[][] = [];
-  const rowTypes: ('empty' | 'top_label' | 'header' | 'department' | 'sealer' | 'status_approved' | 'status_ontime' | 'status_rejected' | 'status_other' | 'grand_total')[] = [];
+  const rowTypes: (
+    | 'empty'
+    | 'top_label'
+    | 'header'
+    | 'department'
+    | 'sub_metric'
+    | 'sealer'
+    | 'status_approved'
+    | 'status_ontime'
+    | 'status_rejected'
+    | 'status_other'
+    | 'grand_total'
+    | 'grand_sub'
+  )[] = [];
 
   // Row 0 & 1: Empty padding rows
   aoa.push([]);
@@ -65,7 +78,11 @@ function buildStyledPivotMatrixSheet(
   aoa.push(headerRow);
   rowTypes.push('header');
 
-  // Build hierarchical data rows
+  const getUniqueStyles = (items: NormalizedRow[]) => {
+    return new Set(items.map(r => r.styleCode?.trim() || r.styleName?.trim() || '').filter(Boolean)).size;
+  };
+
+  // Build hierarchical data rows nested completely under each Department / Dimension
   for (const dimVal of dimValues) {
     const dimRows = rows.filter(r => r[dimension]?.trim() === dimVal);
     if (dimRows.length === 0) continue;
@@ -77,7 +94,7 @@ function buildStyledPivotMatrixSheet(
     }
     const dimGrandTotal = dimRows.length;
 
-    // ── 1. Department / Category Row (Bold) ──
+    // ── 1. Department / Category Header Row (Bold) ──
     aoa.push([
       dimVal,
       ...drops.map(d => (dimDropCounts[d] > 0 ? dimDropCounts[d] : null)),
@@ -85,10 +102,29 @@ function buildStyledPivotMatrixSheet(
     ]);
     rowTypes.push('department');
 
-    // ── 2. Sealer / Sample Type Rows ──
-    const sealers = [...new Set(dimRows.map(r => r.sealer?.trim() || (r.sealType || 'Unspecified')))].sort(naturalSortCompare) as string[];
+    // ── 2. Department Unique Styles ──
+    const dimDropUniqueStyles: Record<string, number> = {};
+    for (const d of drops) {
+      const dropItems = dimRows.filter(r => r.drop?.trim() === d);
+      dimDropUniqueStyles[d] = getUniqueStyles(dropItems);
+    }
+    const dimTotalUniqueStyles = getUniqueStyles(dimRows);
+    aoa.push([
+      `  Unique Styles`,
+      ...drops.map(d => (dimDropUniqueStyles[d] > 0 ? dimDropUniqueStyles[d] : null)),
+      dimTotalUniqueStyles,
+    ]);
+    rowTypes.push('sub_metric');
 
-    for (const sealer of sealers) {
+    // ── 3. Sealer / Seal Type Hierarchy ──
+    const allSealers = [...new Set(dimRows.map(r => r.sealer?.trim() || (r.sealType || 'Unspecified')))].sort(naturalSortCompare) as string[];
+    const preferredOrder = ['Blue Seal', 'Silver Seal'];
+    const orderedSealers = [
+      ...preferredOrder.filter(s => allSealers.includes(s)),
+      ...allSealers.filter(s => !preferredOrder.includes(s)),
+    ];
+
+    for (const sealer of orderedSealers) {
       const sealerRows = dimRows.filter(r => (r.sealer?.trim() || (r.sealType || 'Unspecified')) === sealer);
       if (sealerRows.length === 0) continue;
 
@@ -106,7 +142,21 @@ function buildStyledPivotMatrixSheet(
       ]);
       rowTypes.push('sealer');
 
-      // ── 3. Status Rows (Approved / Approved On Time / Rejected) ──
+      // Sealer Unique Styles
+      const sealerDropUniqueStyles: Record<string, number> = {};
+      for (const d of drops) {
+        const dropItems = sealerRows.filter(r => r.drop?.trim() === d);
+        sealerDropUniqueStyles[d] = getUniqueStyles(dropItems);
+      }
+      const sealerTotalUniqueStyles = getUniqueStyles(sealerRows);
+      aoa.push([
+        `    Unique Styles`,
+        ...drops.map(d => (sealerDropUniqueStyles[d] > 0 ? sealerDropUniqueStyles[d] : null)),
+        sealerTotalUniqueStyles,
+      ]);
+      rowTypes.push('sub_metric');
+
+      // ── Approved ──
       const approvedRows = sealerRows.filter(r => r.statusNormalized === 'Approved');
       if (approvedRows.length > 0) {
         const approvedDropCounts: Record<string, number> = {};
@@ -136,7 +186,7 @@ function buildStyledPivotMatrixSheet(
         }
       }
 
-      // Rejected
+      // ── Rejected ──
       const rejectedRows = sealerRows.filter(r => r.statusNormalized === 'Rejected');
       if (rejectedRows.length > 0) {
         const rejectedDropCounts: Record<string, number> = {};
@@ -151,7 +201,7 @@ function buildStyledPivotMatrixSheet(
         rowTypes.push('status_rejected');
       }
 
-      // Other / Pending statuses
+      // ── Other / Pending statuses ──
       const otherStatuses = [...new Set(sealerRows.map(r => r.statusNormalized))].filter(s => s !== 'Approved' && s !== 'Rejected');
       for (const status of otherStatuses) {
         const otherRows = sealerRows.filter(r => r.statusNormalized === status);
@@ -179,11 +229,24 @@ function buildStyledPivotMatrixSheet(
   const totalOverallGrandTotal = rows.length;
 
   aoa.push([
-    'Grand Total',
+    'Grand Total (Samples)',
     ...drops.map(d => (dropGrandTotals[d] > 0 ? dropGrandTotals[d] : null)),
     totalOverallGrandTotal,
   ]);
   rowTypes.push('grand_total');
+
+  // Grand Total Unique Styles
+  const dropGrandUniqueStyles: Record<string, number> = {};
+  for (const d of drops) {
+    dropGrandUniqueStyles[d] = getUniqueStyles(rows.filter(r => r.drop?.trim() === d));
+  }
+  const totalOverallUniqueStyles = getUniqueStyles(rows);
+  aoa.push([
+    '  Grand Total Unique Styles',
+    ...drops.map(d => (dropGrandUniqueStyles[d] > 0 ? dropGrandUniqueStyles[d] : null)),
+    totalOverallUniqueStyles,
+  ]);
+  rowTypes.push('grand_sub');
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   const totalCols = drops.length + 2; // Col 0 is Row Labels, last Col is Grand Total
@@ -232,6 +295,18 @@ function buildStyledPivotMatrixSheet(
           border: {
             top: { style: 'medium', color: { rgb: PALETTE.deptSepLine } },
             bottom: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+            left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+            right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+          },
+        };
+      } else if (type === 'sub_metric') {
+        cell.s = {
+          font: { name: FONT_FAMILY, sz: 9.5, italic: true, bold: false, color: { rgb: '475569' } },
+          fill: { fgColor: { rgb: PALETTE.white } },
+          alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
+          border: {
+            top: { style: 'thin', color: { rgb: 'F1F5F9' } },
+            bottom: { style: 'thin', color: { rgb: 'F1F5F9' } },
             left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
             right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
           },
@@ -303,6 +378,18 @@ function buildStyledPivotMatrixSheet(
           alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
           border: {
             top: { style: 'thin', color: { rgb: '64748B' } },
+            bottom: { style: 'thin', color: { rgb: '64748B' } },
+            left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+            right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+          },
+        };
+      } else if (type === 'grand_sub') {
+        cell.s = {
+          font: { name: FONT_FAMILY, sz: 10, bold: true, color: { rgb: '0F4C81' } },
+          fill: { fgColor: { rgb: PALETTE.grandTotalBg } },
+          alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
+          border: {
+            top: { style: 'thin', color: { rgb: 'CBD5E1' } },
             bottom: { style: 'double', color: { rgb: '000000' } },
             left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
             right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
