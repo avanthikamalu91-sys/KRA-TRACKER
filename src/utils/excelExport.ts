@@ -47,7 +47,7 @@ function buildStyledPivotMatrixSheet(
   const dimValues = [...new Set(rows.map(r => r[dimension]?.trim()).filter(Boolean))].sort(naturalSortCompare) as string[];
 
   const aoa: (string | number | null)[][] = [];
-  const rowTypes: ('empty' | 'top_label' | 'header' | 'department' | 'sealer' | 'status_approved' | 'status_rejected' | 'status_other' | 'grand_total')[] = [];
+  const rowTypes: ('empty' | 'top_label' | 'header' | 'department' | 'sealer' | 'status_approved' | 'status_ontime' | 'status_rejected' | 'status_other' | 'grand_total')[] = [];
 
   // Row 0 & 1: Empty padding rows
   aoa.push([]);
@@ -106,37 +106,67 @@ function buildStyledPivotMatrixSheet(
       ]);
       rowTypes.push('sealer');
 
-      // ── 3. Status Rows (Approved / Rejected) ──
-      const preferredStatuses = ['Approved', 'Rejected', 'Pending'];
-      const presentStatuses = [...new Set(sealerRows.map(r => r.statusNormalized))];
-      const orderedStatuses = [
-        ...preferredStatuses.filter(s => presentStatuses.includes(s as any)),
-        ...presentStatuses.filter(s => !preferredStatuses.includes(s)),
-      ];
+      // ── 3. Status Rows (Approved / Approved On Time / Rejected) ──
+      const approvedRows = sealerRows.filter(r => r.statusNormalized === 'Approved');
+      if (approvedRows.length > 0) {
+        const approvedDropCounts: Record<string, number> = {};
+        for (const d of drops) {
+          approvedDropCounts[d] = approvedRows.filter(r => r.drop?.trim() === d).length;
+        }
+        aoa.push([
+          `    Approved`,
+          ...drops.map(d => (approvedDropCounts[d] > 0 ? approvedDropCounts[d] : null)),
+          approvedRows.length,
+        ]);
+        rowTypes.push('status_approved');
 
-      for (const status of orderedStatuses) {
-        const statusRows = sealerRows.filter(r => r.statusNormalized === status);
-        if (statusRows.length === 0) continue;
+        // Approved On Time
+        const approvedOnTimeRows = approvedRows.filter(r => r.onTime === true);
+        if (approvedOnTimeRows.length > 0) {
+          const onTimeDropCounts: Record<string, number> = {};
+          for (const d of drops) {
+            onTimeDropCounts[d] = approvedOnTimeRows.filter(r => r.drop?.trim() === d).length;
+          }
+          aoa.push([
+            `      Approved On Time`,
+            ...drops.map(d => (onTimeDropCounts[d] > 0 ? onTimeDropCounts[d] : null)),
+            approvedOnTimeRows.length,
+          ]);
+          rowTypes.push('status_ontime');
+        }
+      }
+
+      // Rejected
+      const rejectedRows = sealerRows.filter(r => r.statusNormalized === 'Rejected');
+      if (rejectedRows.length > 0) {
+        const rejectedDropCounts: Record<string, number> = {};
+        for (const d of drops) {
+          rejectedDropCounts[d] = rejectedRows.filter(r => r.drop?.trim() === d).length;
+        }
+        aoa.push([
+          `    Rejected`,
+          ...drops.map(d => (rejectedDropCounts[d] > 0 ? rejectedDropCounts[d] : null)),
+          rejectedRows.length,
+        ]);
+        rowTypes.push('status_rejected');
+      }
+
+      // Other / Pending statuses
+      const otherStatuses = [...new Set(sealerRows.map(r => r.statusNormalized))].filter(s => s !== 'Approved' && s !== 'Rejected');
+      for (const status of otherStatuses) {
+        const otherRows = sealerRows.filter(r => r.statusNormalized === status);
+        if (otherRows.length === 0) continue;
 
         const statusDropCounts: Record<string, number> = {};
         for (const d of drops) {
-          statusDropCounts[d] = statusRows.filter(r => r.drop?.trim() === d).length;
+          statusDropCounts[d] = otherRows.filter(r => r.drop?.trim() === d).length;
         }
-        const statusGrandTotal = statusRows.length;
-
-        // Status Row (Regular font, indented with 4 spaces)
         aoa.push([
           `    ${status}`,
           ...drops.map(d => (statusDropCounts[d] > 0 ? statusDropCounts[d] : null)),
-          statusGrandTotal,
+          otherRows.length,
         ]);
-        if (status === 'Approved') {
-          rowTypes.push('status_approved');
-        } else if (status === 'Rejected') {
-          rowTypes.push('status_rejected');
-        } else {
-          rowTypes.push('status_other');
-        }
+        rowTypes.push('status_other');
       }
     }
   }
@@ -222,6 +252,18 @@ function buildStyledPivotMatrixSheet(
         cell.s = {
           font: { name: FONT_FAMILY, sz: 9.5, bold: false, color: { rgb: '1E293B' } },
           fill: { fgColor: { rgb: PALETTE.white } },
+          alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
+          border: {
+            top: { style: 'thin', color: { rgb: 'F1F5F9' } },
+            bottom: { style: 'thin', color: { rgb: 'F1F5F9' } },
+            left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+            right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+          },
+        };
+      } else if (type === 'status_ontime') {
+        cell.s = {
+          font: { name: FONT_FAMILY, sz: 9, bold: false, color: { rgb: PALETTE.approvedGreen } },
+          fill: { fgColor: { rgb: 'F0FDF4' } },
           alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
           border: {
             top: { style: 'thin', color: { rgb: 'F1F5F9' } },
