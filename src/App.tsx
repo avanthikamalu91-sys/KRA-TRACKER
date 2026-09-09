@@ -201,11 +201,11 @@ export default function App() {
 
   const navItems: { id: NavItem; label: string; icon: React.ReactNode; disabled?: boolean }[] = [
     { id: 'overview',  label: 'Overview',           icon: <IconGrid /> },
+    { id: 'breakdown', label: 'Breakdown',          icon: <IconLayers /> },
     { id: 'tracking',  label: 'Sample Tracking',    icon: <IconCalendarCheck /> },
-    { id: 'rejection', label: 'Rejection Analysis', icon: <IconXCircle /> },
     { id: 'pending',   label: 'Pending Samples',    icon: <IconClock /> },
     { id: 'vendor',    label: 'Vendor Performance', icon: <IconBarChart /> },
-    { id: 'breakdown', label: 'Breakdown',          icon: <IconLayers /> },
+    { id: 'rejection', label: 'Rejection Analysis', icon: <IconXCircle /> },
     { id: 'detail',    label: 'Style Detail',       icon: <IconTable /> },
   ];
 
