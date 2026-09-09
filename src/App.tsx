@@ -246,14 +246,11 @@ export default function App() {
         {/* Logo */}
         <div className="sidebar-logo">
           <img
-            src="/logo.jpg"
-            alt="Z - TRACK Logo"
+            src="/image.png"
+            alt="Z - TRACK"
             className="sidebar-logo-img"
           />
-          <span className="sidebar-logo-text">
-            Z - TRACK
-            <span className="sidebar-logo-sub">ZUDIO QUALITY</span>
-          </span>
+          <span className="sidebar-logo-text">Z - TRACK</span>
           <button
             type="button"
             className="mobile-close-btn"
