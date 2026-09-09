@@ -190,12 +190,6 @@ export default function App() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const currentUser = {
-    name: 'Technical & Quality Team',
-    role: 'Quality Administrator',
-    email: 'admin@kratracker.com',
-  };
-
   const navItems: { id: NavItem; label: string; icon: React.ReactNode; disabled?: boolean }[] = [
     { id: 'overview',  label: 'Overview',           icon: <IconGrid /> },
     { id: 'breakdown', label: 'Breakdown',          icon: <IconLayers /> },
@@ -407,13 +401,6 @@ export default function App() {
                 Export PDF
               </button>
             )}
-            <div className="topbar-user" title="Technical & Quality Team">
-              <div className="topbar-avatar">{currentUser.name.slice(0, 2).toUpperCase()}</div>
-              <div className="topbar-user-info">
-                <span className="topbar-user-name">{currentUser.name}</span>
-                <span className="topbar-user-role">{currentUser.role}</span>
-              </div>
-            </div>
           </div>
         </div>
 
