@@ -22,6 +22,10 @@ const PALETTE = {
   rejectedRed: 'B91C1C',   // Deep red text
   navyHeader: '0F4C81',    // Brand navy for summary table
   white: 'FFFFFF',
+  pctGreenBg: 'F0FDF4',   // Light green for approved/RFT percentages
+  pctRedBg: 'FEF2F2',     // Light red for rejected percentages
+  pctNeutralBg: 'F8FAFC', // Neutral slate for general percentages
+  pctMutedText: '475569', // Muted slate text
 };
 
 const FONT_FAMILY = 'Calibri';
@@ -31,9 +35,15 @@ const FONT_FAMILY = 'Calibri';
  * Header: Light blue background with bold labels
  * Row hierarchy:
  *   Department (Bold, blue top border, bold counts)
+ *     Unique Styles
+ *     RFT & RFT %
+ *     Approved & Approved %
+ *     Rejected & Rejected %
  *     Blue Seal / Silver Seal (Bold, indented)
- *       Approved (Regular, indented)
- *       Rejected (Regular, indented)
+ *       Unique Styles
+ *       RFT & RFT %
+ *       Approved & Approved % (with On-Time & On-Time %)
+ *       Rejected & Rejected %
  *   Grand Total (Bottom ice blue fill, bold, double bottom border)
  */
 function buildStyledPivotMatrixSheet(
@@ -53,6 +63,12 @@ function buildStyledPivotMatrixSheet(
     | 'header'
     | 'department'
     | 'sub_metric'
+    | 'rft_metric'
+    | 'pct_metric_rft'
+    | 'pct_metric_approved'
+    | 'pct_metric_rejected'
+    | 'pct_metric_ontime'
+    | 'pct_metric_other'
     | 'sealer'
     | 'status_approved'
     | 'status_ontime'
@@ -60,6 +76,9 @@ function buildStyledPivotMatrixSheet(
     | 'status_other'
     | 'grand_total'
     | 'grand_sub'
+    | 'grand_sub_rft_pct'
+    | 'grand_sub_approved_pct'
+    | 'grand_sub_rejected_pct'
   )[] = [];
 
   // Row 0 & 1: Empty padding rows
@@ -80,6 +99,25 @@ function buildStyledPivotMatrixSheet(
 
   const getUniqueStyles = (items: NormalizedRow[]) => {
     return new Set(items.map(r => r.styleCode?.trim() || r.styleName?.trim() || '').filter(Boolean)).size;
+  };
+
+  const getRFTCount = (items: NormalizedRow[]) => {
+    const styleCounts = new Map<string, number>();
+    for (const r of items) {
+      const key = r.styleCode?.trim() || r.styleName?.trim() || '';
+      if (!key) continue;
+      styleCounts.set(key, (styleCounts.get(key) || 0) + 1);
+    }
+    let rft = 0;
+    for (const count of styleCounts.values()) {
+      if (count === 1) rft++;
+    }
+    return rft;
+  };
+
+  const calcPct = (num: number, den: number): string | null => {
+    if (!den || den === 0) return null;
+    return `${((num / den) * 100).toFixed(1)}%`;
   };
 
   // Build hierarchical data rows nested completely under each Department / Dimension
@@ -115,6 +153,73 @@ function buildStyledPivotMatrixSheet(
       dimTotalUniqueStyles,
     ]);
     rowTypes.push('sub_metric');
+
+    // ── 2b. Department RFT & RFT % ──
+    const dimDropRFT: Record<string, number> = {};
+    for (const d of drops) {
+      const dropItems = dimRows.filter(r => r.drop?.trim() === d);
+      dimDropRFT[d] = getRFTCount(dropItems);
+    }
+    const dimTotalRFT = getRFTCount(dimRows);
+    aoa.push([
+      `  RFT`,
+      ...drops.map(d => (dimDropRFT[d] > 0 ? dimDropRFT[d] : null)),
+      dimTotalRFT,
+    ]);
+    rowTypes.push('rft_metric');
+
+    aoa.push([
+      `  RFT %`,
+      ...drops.map(d => calcPct(dimDropRFT[d], dimDropUniqueStyles[d])),
+      calcPct(dimTotalRFT, dimTotalUniqueStyles),
+    ]);
+    rowTypes.push('pct_metric_rft');
+
+    // ── 2c. Department Approved & Approved % ──
+    const dimApprovedRows = dimRows.filter(r => r.statusNormalized === 'Approved');
+    const dimDropApproved: Record<string, number> = {};
+    for (const d of drops) {
+      dimDropApproved[d] = dimApprovedRows.filter(r => r.drop?.trim() === d).length;
+    }
+    const dimTotalApproved = dimApprovedRows.length;
+    if (dimTotalApproved > 0) {
+      aoa.push([
+        `  Approved`,
+        ...drops.map(d => (dimDropApproved[d] > 0 ? dimDropApproved[d] : null)),
+        dimTotalApproved,
+      ]);
+      rowTypes.push('status_approved');
+
+      aoa.push([
+        `  Approved %`,
+        ...drops.map(d => calcPct(dimDropApproved[d], dimDropCounts[d])),
+        calcPct(dimTotalApproved, dimGrandTotal),
+      ]);
+      rowTypes.push('pct_metric_approved');
+    }
+
+    // ── 2d. Department Rejected & Rejected % ──
+    const dimRejectedRows = dimRows.filter(r => r.statusNormalized === 'Rejected');
+    const dimDropRejected: Record<string, number> = {};
+    for (const d of drops) {
+      dimDropRejected[d] = dimRejectedRows.filter(r => r.drop?.trim() === d).length;
+    }
+    const dimTotalRejected = dimRejectedRows.length;
+    if (dimTotalRejected > 0) {
+      aoa.push([
+        `  Rejected`,
+        ...drops.map(d => (dimDropRejected[d] > 0 ? dimDropRejected[d] : null)),
+        dimTotalRejected,
+      ]);
+      rowTypes.push('status_rejected');
+
+      aoa.push([
+        `  Rejected %`,
+        ...drops.map(d => calcPct(dimDropRejected[d], dimDropCounts[d])),
+        calcPct(dimTotalRejected, dimGrandTotal),
+      ]);
+      rowTypes.push('pct_metric_rejected');
+    }
 
     // ── 3. Sealer / Seal Type Hierarchy ──
     const allSealers = [...new Set(dimRows.map(r => r.sealer?.trim() || (r.sealType || 'Unspecified')))].sort(naturalSortCompare) as string[];
@@ -156,7 +261,28 @@ function buildStyledPivotMatrixSheet(
       ]);
       rowTypes.push('sub_metric');
 
-      // ── Approved ──
+      // Sealer RFT & RFT %
+      const sealerDropRFT: Record<string, number> = {};
+      for (const d of drops) {
+        const dropItems = sealerRows.filter(r => r.drop?.trim() === d);
+        sealerDropRFT[d] = getRFTCount(dropItems);
+      }
+      const sealerTotalRFT = getRFTCount(sealerRows);
+      aoa.push([
+        `    RFT`,
+        ...drops.map(d => (sealerDropRFT[d] > 0 ? sealerDropRFT[d] : null)),
+        sealerTotalRFT,
+      ]);
+      rowTypes.push('rft_metric');
+
+      aoa.push([
+        `    RFT %`,
+        ...drops.map(d => calcPct(sealerDropRFT[d], sealerDropUniqueStyles[d])),
+        calcPct(sealerTotalRFT, sealerTotalUniqueStyles),
+      ]);
+      rowTypes.push('pct_metric_rft');
+
+      // ── Approved & Approved % ──
       const approvedRows = sealerRows.filter(r => r.statusNormalized === 'Approved');
       if (approvedRows.length > 0) {
         const approvedDropCounts: Record<string, number> = {};
@@ -170,7 +296,14 @@ function buildStyledPivotMatrixSheet(
         ]);
         rowTypes.push('status_approved');
 
-        // Approved On Time
+        aoa.push([
+          `    Approved %`,
+          ...drops.map(d => calcPct(approvedDropCounts[d], sealerDropCounts[d])),
+          calcPct(approvedRows.length, sealerGrandTotal),
+        ]);
+        rowTypes.push('pct_metric_approved');
+
+        // Approved On Time & On-Time %
         const approvedOnTimeRows = approvedRows.filter(r => r.onTime === true);
         if (approvedOnTimeRows.length > 0) {
           const onTimeDropCounts: Record<string, number> = {};
@@ -183,10 +316,17 @@ function buildStyledPivotMatrixSheet(
             approvedOnTimeRows.length,
           ]);
           rowTypes.push('status_ontime');
+
+          aoa.push([
+            `      Approved On Time %`,
+            ...drops.map(d => calcPct(onTimeDropCounts[d], approvedDropCounts[d])),
+            calcPct(approvedOnTimeRows.length, approvedRows.length),
+          ]);
+          rowTypes.push('pct_metric_ontime');
         }
       }
 
-      // ── Rejected ──
+      // ── Rejected & Rejected % ──
       const rejectedRows = sealerRows.filter(r => r.statusNormalized === 'Rejected');
       if (rejectedRows.length > 0) {
         const rejectedDropCounts: Record<string, number> = {};
@@ -199,9 +339,16 @@ function buildStyledPivotMatrixSheet(
           rejectedRows.length,
         ]);
         rowTypes.push('status_rejected');
+
+        aoa.push([
+          `    Rejected %`,
+          ...drops.map(d => calcPct(rejectedDropCounts[d], sealerDropCounts[d])),
+          calcPct(rejectedRows.length, sealerGrandTotal),
+        ]);
+        rowTypes.push('pct_metric_rejected');
       }
 
-      // ── Other / Pending statuses ──
+      // ── Other / Pending statuses & % ──
       const otherStatuses = [...new Set(sealerRows.map(r => r.statusNormalized))].filter(s => s !== 'Approved' && s !== 'Rejected');
       for (const status of otherStatuses) {
         const otherRows = sealerRows.filter(r => r.statusNormalized === status);
@@ -217,11 +364,18 @@ function buildStyledPivotMatrixSheet(
           otherRows.length,
         ]);
         rowTypes.push('status_other');
+
+        aoa.push([
+          `    ${status} %`,
+          ...drops.map(d => calcPct(statusDropCounts[d], sealerDropCounts[d])),
+          calcPct(otherRows.length, sealerGrandTotal),
+        ]);
+        rowTypes.push('pct_metric_other');
       }
     }
   }
 
-  // ── 4. Grand Total Row ──
+  // ── 4. Grand Total Rows ──
   const dropGrandTotals: Record<string, number> = {};
   for (const d of drops) {
     dropGrandTotals[d] = rows.filter(r => r.drop?.trim() === d).length;
@@ -247,6 +401,68 @@ function buildStyledPivotMatrixSheet(
     totalOverallUniqueStyles,
   ]);
   rowTypes.push('grand_sub');
+
+  // Grand Total RFT & RFT %
+  const dropGrandRFT: Record<string, number> = {};
+  for (const d of drops) {
+    dropGrandRFT[d] = getRFTCount(rows.filter(r => r.drop?.trim() === d));
+  }
+  const totalOverallRFT = getRFTCount(rows);
+  aoa.push([
+    '  Grand Total RFT',
+    ...drops.map(d => (dropGrandRFT[d] > 0 ? dropGrandRFT[d] : null)),
+    totalOverallRFT,
+  ]);
+  rowTypes.push('grand_sub');
+
+  aoa.push([
+    '  Grand Total RFT %',
+    ...drops.map(d => calcPct(dropGrandRFT[d], dropGrandUniqueStyles[d])),
+    calcPct(totalOverallRFT, totalOverallUniqueStyles),
+  ]);
+  rowTypes.push('grand_sub_rft_pct');
+
+  // Grand Total Approved & Approved %
+  const grandApprovedRows = rows.filter(r => r.statusNormalized === 'Approved');
+  const dropGrandApproved: Record<string, number> = {};
+  for (const d of drops) {
+    dropGrandApproved[d] = grandApprovedRows.filter(r => r.drop?.trim() === d).length;
+  }
+  const totalOverallApproved = grandApprovedRows.length;
+  aoa.push([
+    '  Grand Total Approved',
+    ...drops.map(d => (dropGrandApproved[d] > 0 ? dropGrandApproved[d] : null)),
+    totalOverallApproved,
+  ]);
+  rowTypes.push('grand_sub');
+
+  aoa.push([
+    '  Grand Total Approved %',
+    ...drops.map(d => calcPct(dropGrandApproved[d], dropGrandTotals[d])),
+    calcPct(totalOverallApproved, totalOverallGrandTotal),
+  ]);
+  rowTypes.push('grand_sub_approved_pct');
+
+  // Grand Total Rejected & Rejected %
+  const grandRejectedRows = rows.filter(r => r.statusNormalized === 'Rejected');
+  const dropGrandRejected: Record<string, number> = {};
+  for (const d of drops) {
+    dropGrandRejected[d] = grandRejectedRows.filter(r => r.drop?.trim() === d).length;
+  }
+  const totalOverallRejected = grandRejectedRows.length;
+  aoa.push([
+    '  Grand Total Rejected',
+    ...drops.map(d => (dropGrandRejected[d] > 0 ? dropGrandRejected[d] : null)),
+    totalOverallRejected,
+  ]);
+  rowTypes.push('grand_sub');
+
+  aoa.push([
+    '  Grand Total Rejected %',
+    ...drops.map(d => calcPct(dropGrandRejected[d], dropGrandTotals[d])),
+    calcPct(totalOverallRejected, totalOverallGrandTotal),
+  ]);
+  rowTypes.push('grand_sub_rejected_pct');
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   const totalCols = drops.length + 2; // Col 0 is Row Labels, last Col is Grand Total
@@ -311,6 +527,30 @@ function buildStyledPivotMatrixSheet(
             right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
           },
         };
+      } else if (type === 'rft_metric') {
+        cell.s = {
+          font: { name: FONT_FAMILY, sz: 9.5, italic: true, bold: false, color: { rgb: PALETTE.approvedGreen } },
+          fill: { fgColor: { rgb: PALETTE.pctGreenBg } },
+          alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
+          border: {
+            top: { style: 'thin', color: { rgb: 'F1F5F9' } },
+            bottom: { style: 'thin', color: { rgb: 'F1F5F9' } },
+            left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+            right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+          },
+        };
+      } else if (type === 'pct_metric_rft') {
+        cell.s = {
+          font: { name: FONT_FAMILY, sz: 9, italic: true, bold: true, color: { rgb: PALETTE.approvedGreen } },
+          fill: { fgColor: { rgb: PALETTE.pctGreenBg } },
+          alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
+          border: {
+            top: { style: 'thin', color: { rgb: 'F1F5F9' } },
+            bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
+            left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+            right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+          },
+        };
       } else if (type === 'sealer') {
         cell.s = {
           font: { name: FONT_FAMILY, sz: 10, bold: true, color: { rgb: '0F172A' } },
@@ -335,14 +575,38 @@ function buildStyledPivotMatrixSheet(
             right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
           },
         };
+      } else if (type === 'pct_metric_approved') {
+        cell.s = {
+          font: { name: FONT_FAMILY, sz: 9, italic: true, bold: true, color: { rgb: PALETTE.approvedGreen } },
+          fill: { fgColor: { rgb: PALETTE.pctGreenBg } },
+          alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
+          border: {
+            top: { style: 'thin', color: { rgb: 'F1F5F9' } },
+            bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
+            left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+            right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+          },
+        };
       } else if (type === 'status_ontime') {
         cell.s = {
           font: { name: FONT_FAMILY, sz: 9, bold: false, color: { rgb: PALETTE.approvedGreen } },
-          fill: { fgColor: { rgb: 'F0FDF4' } },
+          fill: { fgColor: { rgb: PALETTE.pctGreenBg } },
           alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
           border: {
             top: { style: 'thin', color: { rgb: 'F1F5F9' } },
             bottom: { style: 'thin', color: { rgb: 'F1F5F9' } },
+            left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+            right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+          },
+        };
+      } else if (type === 'pct_metric_ontime') {
+        cell.s = {
+          font: { name: FONT_FAMILY, sz: 8.5, italic: true, bold: true, color: { rgb: PALETTE.approvedGreen } },
+          fill: { fgColor: { rgb: PALETTE.pctGreenBg } },
+          alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
+          border: {
+            top: { style: 'thin', color: { rgb: 'F1F5F9' } },
+            bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
             left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
             right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
           },
@@ -359,6 +623,18 @@ function buildStyledPivotMatrixSheet(
             right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
           },
         };
+      } else if (type === 'pct_metric_rejected') {
+        cell.s = {
+          font: { name: FONT_FAMILY, sz: 9, italic: true, bold: true, color: { rgb: PALETTE.rejectedRed } },
+          fill: { fgColor: { rgb: PALETTE.pctRedBg } },
+          alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
+          border: {
+            top: { style: 'thin', color: { rgb: 'F1F5F9' } },
+            bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
+            left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+            right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+          },
+        };
       } else if (type === 'status_other') {
         cell.s = {
           font: { name: FONT_FAMILY, sz: 9.5, bold: false, color: { rgb: '334155' } },
@@ -367,6 +643,18 @@ function buildStyledPivotMatrixSheet(
           border: {
             top: { style: 'thin', color: { rgb: 'F1F5F9' } },
             bottom: { style: 'thin', color: { rgb: 'F1F5F9' } },
+            left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+            right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+          },
+        };
+      } else if (type === 'pct_metric_other') {
+        cell.s = {
+          font: { name: FONT_FAMILY, sz: 9, italic: true, bold: false, color: { rgb: PALETTE.pctMutedText } },
+          fill: { fgColor: { rgb: PALETTE.pctNeutralBg } },
+          alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
+          border: {
+            top: { style: 'thin', color: { rgb: 'F1F5F9' } },
+            bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
             left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
             right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
           },
@@ -386,6 +674,30 @@ function buildStyledPivotMatrixSheet(
       } else if (type === 'grand_sub') {
         cell.s = {
           font: { name: FONT_FAMILY, sz: 10, bold: true, color: { rgb: '0F4C81' } },
+          fill: { fgColor: { rgb: PALETTE.grandTotalBg } },
+          alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
+          border: {
+            top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+            bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+            left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+            right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+          },
+        };
+      } else if (type === 'grand_sub_rft_pct' || type === 'grand_sub_approved_pct') {
+        cell.s = {
+          font: { name: FONT_FAMILY, sz: 9.5, bold: true, italic: true, color: { rgb: PALETTE.approvedGreen } },
+          fill: { fgColor: { rgb: PALETTE.grandTotalBg } },
+          alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
+          border: {
+            top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+            bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+            left: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+            right: { style: 'thin', color: { rgb: PALETTE.gridBorder } },
+          },
+        };
+      } else if (type === 'grand_sub_rejected_pct') {
+        cell.s = {
+          font: { name: FONT_FAMILY, sz: 9.5, bold: true, italic: true, color: { rgb: PALETTE.rejectedRed } },
           fill: { fgColor: { rgb: PALETTE.grandTotalBg } },
           alignment: { vertical: 'center', horizontal: c === 0 ? 'left' : 'right' },
           border: {
@@ -411,7 +723,7 @@ function buildStyledPivotMatrixSheet(
 }
 
 /**
- * Builds a Styled Tabular Breakdown Worksheet (Unique styles & RFT% metrics)
+ * Builds a Styled Tabular Breakdown Worksheet (Unique styles, RFT%, Approved%, Rejected% metrics)
  */
 function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.WorkSheet {
   const headers = [
@@ -421,8 +733,11 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
     'Overall On-Time (Count)',
     'Overall On-Time (%)',
     'Total Approved',
+    'Total Approved (%)',
     'Total Rejected',
+    'Total Rejected (%)',
     'Total Pending',
+    'Total Pending (%)',
     'Overall RFT (Count)',
     'Overall Not RFT',
     'Overall RFT (%)',
@@ -431,22 +746,44 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
     'Blue On-Time (Count)',
     'Blue On-Time (%)',
     'Blue Approved',
+    'Blue Approved (%)',
     'Blue Rejected',
+    'Blue Rejected (%)',
     'Blue Pending',
+    'Blue Pending (%)',
+    'Blue RFT (Count)',
+    'Blue Not RFT',
     'Blue RFT (%)',
     'Silver Total Samples',
     'Silver Unique Styles',
     'Silver On-Time (Count)',
     'Silver On-Time (%)',
     'Silver Approved',
+    'Silver Approved (%)',
     'Silver Rejected',
+    'Silver Rejected (%)',
     'Silver Pending',
+    'Silver Pending (%)',
+    'Silver RFT (Count)',
+    'Silver Not RFT',
     'Silver RFT (%)',
   ];
 
   const aoa: (string | number | null)[][] = [headers];
 
   for (const r of rows) {
+    const overallApprovedPct = r.overallSamples > 0 ? Number(((r.overallApproved / r.overallSamples) * 100).toFixed(1)) : 0;
+    const overallRejectedPct = r.overallSamples > 0 ? Number(((r.overallRejected / r.overallSamples) * 100).toFixed(1)) : 0;
+    const overallPendingPct  = r.overallSamples > 0 ? Number(((r.overallPending / r.overallSamples) * 100).toFixed(1)) : 0;
+
+    const blueApprovedPct = r.blueSamples > 0 ? Number(((r.blueApproved / r.blueSamples) * 100).toFixed(1)) : 0;
+    const blueRejectedPct = r.blueSamples > 0 ? Number(((r.blueRejected / r.blueSamples) * 100).toFixed(1)) : 0;
+    const bluePendingPct  = r.blueSamples > 0 ? Number(((r.bluePending / r.blueSamples) * 100).toFixed(1)) : 0;
+
+    const silverApprovedPct = r.silverSamples > 0 ? Number(((r.silverApproved / r.silverSamples) * 100).toFixed(1)) : 0;
+    const silverRejectedPct = r.silverSamples > 0 ? Number(((r.silverRejected / r.silverSamples) * 100).toFixed(1)) : 0;
+    const silverPendingPct  = r.silverSamples > 0 ? Number(((r.silverPending / r.silverSamples) * 100).toFixed(1)) : 0;
+
     aoa.push([
       r.dimension,
       r.overallSamples,
@@ -454,8 +791,11 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
       r.overallOnTimeCount,
       Number(r.overallOnTimePct.toFixed(1)),
       r.overallApproved,
+      overallApprovedPct,
       r.overallRejected,
+      overallRejectedPct,
       r.overallPending,
+      overallPendingPct,
       r.overallRFT,
       r.overallNotRFT,
       Number(r.overallRFTPct.toFixed(1)),
@@ -464,16 +804,26 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
       r.blueOnTimeCount,
       Number(r.blueOnTimePct.toFixed(1)),
       r.blueApproved,
+      blueApprovedPct,
       r.blueRejected,
+      blueRejectedPct,
       r.bluePending,
+      bluePendingPct,
+      r.blueRFT,
+      r.blueNotRFT,
       Number(r.blueRFTPct.toFixed(1)),
       r.silverSamples,
       r.silverTotal,
       r.silverOnTimeCount,
       Number(r.silverOnTimePct.toFixed(1)),
       r.silverApproved,
+      silverApprovedPct,
       r.silverRejected,
+      silverRejectedPct,
       r.silverPending,
+      silverPendingPct,
+      r.silverRFT,
+      r.silverNotRFT,
       Number(r.silverRFTPct.toFixed(1)),
     ]);
   }
@@ -487,8 +837,11 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
     const overallOnTimePct = totalOnTimeEval > 0 ? Number(((totalOnTime / totalOnTimeEval) * 100).toFixed(1)) : 0;
 
     const totalApproved = rows.reduce((acc, r) => acc + r.overallApproved, 0);
+    const totalApprovedPct = totalSamples > 0 ? Number(((totalApproved / totalSamples) * 100).toFixed(1)) : 0;
     const totalRejected = rows.reduce((acc, r) => acc + r.overallRejected, 0);
+    const totalRejectedPct = totalSamples > 0 ? Number(((totalRejected / totalSamples) * 100).toFixed(1)) : 0;
     const totalPending = rows.reduce((acc, r) => acc + r.overallPending, 0);
+    const totalPendingPct = totalSamples > 0 ? Number(((totalPending / totalSamples) * 100).toFixed(1)) : 0;
     const totalRFT = rows.reduce((acc, r) => acc + r.overallRFT, 0);
     const totalNotRFT = rows.reduce((acc, r) => acc + r.overallNotRFT, 0);
     const overallRFTPct = totalStyles > 0 ? Number(((totalRFT / totalStyles) * 100).toFixed(1)) : 0;
@@ -499,9 +852,13 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
     const blueOnTimeEval = rows.reduce((acc, r) => acc + r.blueOnTimeTotal, 0);
     const blueOnTimePct = blueOnTimeEval > 0 ? Number(((blueOnTime / blueOnTimeEval) * 100).toFixed(1)) : 0;
     const blueApproved = rows.reduce((acc, r) => acc + r.blueApproved, 0);
+    const blueApprovedPct = blueSamples > 0 ? Number(((blueApproved / blueSamples) * 100).toFixed(1)) : 0;
     const blueRejected = rows.reduce((acc, r) => acc + r.blueRejected, 0);
+    const blueRejectedPct = blueSamples > 0 ? Number(((blueRejected / blueSamples) * 100).toFixed(1)) : 0;
     const bluePending = rows.reduce((acc, r) => acc + r.bluePending, 0);
+    const bluePendingPct = blueSamples > 0 ? Number(((bluePending / blueSamples) * 100).toFixed(1)) : 0;
     const blueRFT = rows.reduce((acc, r) => acc + r.blueRFT, 0);
+    const blueNotRFT = rows.reduce((acc, r) => acc + r.blueNotRFT, 0);
     const blueRFTPct = blueTotal > 0 ? Number(((blueRFT / blueTotal) * 100).toFixed(1)) : 0;
 
     const silverSamples = rows.reduce((acc, r) => acc + r.silverSamples, 0);
@@ -510,9 +867,13 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
     const silverOnTimeEval = rows.reduce((acc, r) => acc + r.silverOnTimeTotal, 0);
     const silverOnTimePct = silverOnTimeEval > 0 ? Number(((silverOnTime / silverOnTimeEval) * 100).toFixed(1)) : 0;
     const silverApproved = rows.reduce((acc, r) => acc + r.silverApproved, 0);
+    const silverApprovedPct = silverSamples > 0 ? Number(((silverApproved / silverSamples) * 100).toFixed(1)) : 0;
     const silverRejected = rows.reduce((acc, r) => acc + r.silverRejected, 0);
+    const silverRejectedPct = silverSamples > 0 ? Number(((silverRejected / silverSamples) * 100).toFixed(1)) : 0;
     const silverPending = rows.reduce((acc, r) => acc + r.silverPending, 0);
+    const silverPendingPct = silverSamples > 0 ? Number(((silverPending / silverSamples) * 100).toFixed(1)) : 0;
     const silverRFT = rows.reduce((acc, r) => acc + r.silverRFT, 0);
+    const silverNotRFT = rows.reduce((acc, r) => acc + r.silverNotRFT, 0);
     const silverRFTPct = silverTotal > 0 ? Number(((silverRFT / silverTotal) * 100).toFixed(1)) : 0;
 
     aoa.push([
@@ -522,8 +883,11 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
       totalOnTime,
       overallOnTimePct,
       totalApproved,
+      totalApprovedPct,
       totalRejected,
+      totalRejectedPct,
       totalPending,
+      totalPendingPct,
       totalRFT,
       totalNotRFT,
       overallRFTPct,
@@ -532,16 +896,26 @@ function buildStyledTabularSheet(rows: BreakdownRow[], dimHeader: string): XLSX.
       blueOnTime,
       blueOnTimePct,
       blueApproved,
+      blueApprovedPct,
       blueRejected,
+      blueRejectedPct,
       bluePending,
+      bluePendingPct,
+      blueRFT,
+      blueNotRFT,
       blueRFTPct,
       silverSamples,
       silverTotal,
       silverOnTime,
       silverOnTimePct,
       silverApproved,
+      silverApprovedPct,
       silverRejected,
+      silverRejectedPct,
       silverPending,
+      silverPendingPct,
+      silverRFT,
+      silverNotRFT,
       silverRFTPct,
     ]);
   }
@@ -657,6 +1031,9 @@ export function exportBreakdownToExcel({
   const topGroup = sortedByRFT[0];
   const lowestGroup = sortedByRFT[sortedByRFT.length - 1];
 
+  const totalApprovedPct = totalSamples > 0 ? ((totalApproved / totalSamples) * 100).toFixed(1) : '0.0';
+  const totalRejectedPct = totalSamples > 0 ? ((totalRejected / totalSamples) * 100).toFixed(1) : '0.0';
+
   const summarySheetData = [
     ['Metric', 'Value'],
     ['Report Title', 'Z - TRACK - Performance & Drop Breakdown'],
@@ -666,8 +1043,8 @@ export function exportBreakdownToExcel({
     ['Total Sample Submissions', totalSamples],
     ['Total Unique Styles', totalStyles],
     ['Total Reviewed On-Time', `${totalOnTime} (${overallOnTimePct.toFixed(1)}%)`],
-    ['Total Approved Styles', totalApproved],
-    ['Total Rejected Styles', totalRejected],
+    ['Total Approved Styles', `${totalApproved} (${totalApprovedPct}%)`],
+    ['Total Rejected Styles', `${totalRejected} (${totalRejectedPct}%)`],
     ['Overall RFT (%)', `${overallRFTPct}%`],
     ['Top Performing Category', topGroup ? `${topGroup.dimension} (${topGroup.overallRFTPct.toFixed(1)}% RFT)` : 'N/A'],
     ['Lowest Performing Category', lowestGroup ? `${lowestGroup.dimension} (${lowestGroup.overallRFTPct.toFixed(1)}% RFT)` : 'N/A'],
