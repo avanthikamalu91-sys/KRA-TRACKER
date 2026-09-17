@@ -10,6 +10,7 @@ import VendorPerformance from './components/VendorPerformance';
 import PendingSamples from './components/PendingSamples';
 import SampleTracking from './components/SampleTracking';
 import RejectionAnalysis from './components/RejectionAnalysis';
+import TechnologistPerformance from './components/TechnologistPerformance';
 import { parseExcelFile, isParseError } from './utils/excelParser';
 import {
   normalizeRows,
@@ -23,9 +24,15 @@ import {
   type SealType,
   formatDateDisplay,
 } from './utils/dataUtils';
+import {
+  parseCalendarFile,
+  parseCalendarRows,
+  applyCalendarToRows,
+  type CalendarEntry,
+} from './utils/calendarUtils';
 
 type AppState = 'idle' | 'loading' | 'ready' | 'error';
-type NavItem = 'overview' | 'tracking' | 'rejection' | 'pending' | 'vendor' | 'breakdown' | 'detail';
+type NavItem = 'overview' | 'breakdown' | 'tracking' | 'pending' | 'technologist' | 'vendor' | 'rejection' | 'detail';
 
 const DEFAULT_FILTERS: ActiveFilters = {
   department: '',
@@ -134,20 +141,34 @@ function IconXCircle() {
   );
 }
 
+function IconUserCheck() {
+  return (
+    <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <polyline points="16 11 18 13 22 9" />
+    </svg>
+  );
+}
+
 export default function App() {
-  const [appState,     setAppState]     = useState<AppState>('idle');
-  const [error,        setError]        = useState<string>('');
-  const [fileName,     setFileName]     = useState<string>('');
-  const [rows,         setRows]         = useState<NormalizedRow[]>([]);
-  const [filterOpts,   setFilterOpts]   = useState<FilterOptions>({ departments: [], brands: [], seasons: [], drops: [], hasDates: false });
-  const [filters,      setFilters]      = useState<ActiveFilters>(DEFAULT_FILTERS);
-  const [activeNav,    setActiveNav]    = useState<NavItem>('overview');
-  const [sealFilter,   setSealFilter]   = useState<'all' | SealType>('all');
+  const [appState, setAppState] = useState<AppState>('idle');
+  const [error, setError] = useState<string>('');
+  const [fileName, setFileName] = useState<string>('');
+  const [rawSampleRows, setRawSampleRows] = useState<NormalizedRow[]>([]);
+  const [calendarFileName, setCalendarFileName] = useState<string>('');
+  const [calendarEntries, setCalendarEntries] = useState<CalendarEntry[]>([]);
+  const [rows, setRows] = useState<NormalizedRow[]>([]);
+  const [filterOpts, setFilterOpts] = useState<FilterOptions>({ departments: [], brands: [], seasons: [], drops: [], hasDates: false });
+  const [filters, setFilters] = useState<ActiveFilters>(DEFAULT_FILTERS);
+  const [activeNav, setActiveNav] = useState<NavItem>('overview');
+  const [sealFilter, setSealFilter] = useState<'all' | SealType>('all');
   const [breakdownDim, setBreakdownDim] = useState<'department' | 'brand' | 'season' | 'drop'>('season');
   const [detailSortKey, setDetailSortKey] = useState<'styleCode' | 'styleName' | 'sealType' | 'occurrences' | 'isRFT' | 'primaryStatus' | 'department' | 'brand' | 'season' | 'drop' | 'date'>('styleName');
   const [detailSortDir, setDetailSortDir] = useState<'asc' | 'desc'>('asc');
 
-  const handleFile = useCallback(async (file: File) => {
+  // Handle Sample Data file
+  const handleSampleFile = useCallback(async (file: File) => {
     setAppState('loading');
     setError('');
     setFileName(file.name);
@@ -159,8 +180,54 @@ export default function App() {
       return;
     }
     const normalized = normalizeRows(result.rows);
-    const opts       = extractFilterOptions(normalized);
-    setRows(normalized);
+    setRawSampleRows(normalized);
+
+    // Prepare processed rows with calendar if already uploaded
+    const processed = calendarEntries.length > 0 ? applyCalendarToRows(normalized, calendarEntries) : normalized;
+    const opts = extractFilterOptions(processed);
+    setRows(processed);
+    setFilterOpts(opts);
+    setFilters({
+      ...DEFAULT_FILTERS,
+      startDate: opts.minDate || '',
+      endDate: opts.maxDate || '',
+    });
+    // Stay on upload screen so user can upload calendar and review before proceeding
+    setAppState('idle');
+  }, [calendarEntries]);
+
+  // Handle Delivery / CP Calendar file
+  const handleCalendarFile = useCallback(async (file: File) => {
+    try {
+      const parsedEntries = await parseCalendarFile(file);
+      if (!parsedEntries.length) {
+        alert('Could not detect Drop milestones or dates in the uploaded calendar. Please verify the columns.');
+        return;
+      }
+      setCalendarEntries(parsedEntries);
+      setCalendarFileName(file.name);
+
+      // If sample rows are already loaded, re-apply calendar deadlines dynamically
+      if (rawSampleRows.length > 0) {
+        const updatedRows = applyCalendarToRows(rawSampleRows, parsedEntries);
+        const opts = extractFilterOptions(updatedRows);
+        setRows(updatedRows);
+        setFilterOpts(opts);
+      }
+    } catch (e: any) {
+      alert(`Failed to load calendar: ${e?.message || 'Unknown error'}`);
+    }
+  }, [rawSampleRows]);
+
+  // Proceed to dashboard view
+  const handleProceed = useCallback(() => {
+    if (rawSampleRows.length === 0) {
+      alert('Please upload Sample Data first.');
+      return;
+    }
+    const processed = calendarEntries.length > 0 ? applyCalendarToRows(rawSampleRows, calendarEntries) : rawSampleRows;
+    const opts = extractFilterOptions(processed);
+    setRows(processed);
     setFilterOpts(opts);
     setFilters({
       ...DEFAULT_FILTERS,
@@ -169,7 +236,7 @@ export default function App() {
     });
     setAppState('ready');
     setActiveNav('overview');
-  }, []);
+  }, [rawSampleRows, calendarEntries]);
 
   const dashboard: DashboardMetrics = useMemo(() => {
     if (!rows.length) {
@@ -191,13 +258,14 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems: { id: NavItem; label: string; icon: React.ReactNode; disabled?: boolean }[] = [
-    { id: 'overview',  label: 'Overview',           icon: <IconGrid /> },
-    { id: 'breakdown', label: 'Breakdown',          icon: <IconLayers /> },
-    { id: 'tracking',  label: 'Sample Tracking',    icon: <IconCalendarCheck /> },
-    { id: 'pending',   label: 'Pending Samples',    icon: <IconClock /> },
-    { id: 'vendor',    label: 'Vendor Performance', icon: <IconBarChart /> },
-    { id: 'rejection', label: 'Rejection Analysis', icon: <IconXCircle /> },
-    { id: 'detail',    label: 'Style Detail',       icon: <IconTable /> },
+    { id: 'overview',     label: 'Overview',               icon: <IconGrid /> },
+    { id: 'breakdown',    label: 'Breakdown',              icon: <IconLayers /> },
+    { id: 'tracking',     label: 'Sample Tracking',        icon: <IconCalendarCheck /> },
+    { id: 'pending',      label: 'Pending Samples',        icon: <IconClock /> },
+    { id: 'technologist', label: 'Individual Performance', icon: <IconUserCheck /> },
+    { id: 'vendor',       label: 'Vendor Performance',     icon: <IconBarChart /> },
+    { id: 'rejection',    label: 'Rejection Analysis',     icon: <IconXCircle /> },
+    { id: 'detail',       label: 'Style Detail',           icon: <IconTable /> },
   ];
 
   const dateRangeSubtitle = useMemo(() => {
@@ -223,6 +291,18 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {/* Hidden global calendar input for topbar/sidebar */}
+      <input
+        id="global-calendar-input"
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleCalendarFile(f);
+          e.target.value = '';
+        }}
+        style={{ display: 'none' }}
+      />
 
       {/* ── Mobile Sidebar Overlay Backdrop ── */}
       {mobileMenuOpen && (
@@ -300,15 +380,29 @@ export default function App() {
               if (appState === 'ready') {
                 setAppState('idle');
                 setRows([]);
+                setRawSampleRows([]);
                 setFilters(DEFAULT_FILTERS);
               } else {
-                document.getElementById('excel-file-input')?.click();
+                document.getElementById('sample-file-input')?.click();
               }
             }}
           >
             <IconUpload />
-            {appState === 'ready' ? 'Change File' : 'Upload File'}
+            {appState === 'ready' ? 'Change Sample File' : 'Upload Sample File'}
           </button>
+
+          <button
+            className="nav-item"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              document.getElementById('global-calendar-input')?.click();
+            }}
+            title="Upload or change Delivery / Critical Path Calendar"
+          >
+            <IconCalendarCheck />
+            {calendarFileName ? 'Update Calendar' : 'Upload Calendar'}
+          </button>
+
           {appState === 'ready' && (
             <button
               className="nav-item"
@@ -365,6 +459,8 @@ export default function App() {
                   ? 'Rejection Analysis & Defect Breakdown'
                   : activeNav === 'pending'
                   ? 'Pending Samples'
+                  : activeNav === 'technologist'
+                  ? 'Individual Performance (Status Updates by Person)'
                   : activeNav === 'vendor'
                   ? 'Vendor Performance'
                   : activeNav === 'breakdown'
@@ -416,7 +512,16 @@ export default function App() {
 
           {/* ── Upload / Loading ── */}
           {(appState === 'idle' || appState === 'loading') && (
-            <FileUpload onFileSelected={handleFile} loading={appState === 'loading'} />
+            <FileUpload
+              onSampleFileSelected={handleSampleFile}
+              onCalendarFileSelected={handleCalendarFile}
+              sampleFileName={fileName}
+              sampleRowCount={rawSampleRows.length}
+              calendarFileName={calendarFileName}
+              calendarDropCount={calendarEntries.length}
+              loading={appState === 'loading'}
+              onProceed={handleProceed}
+            />
           )}
 
           {/* ── Error ── */}
@@ -429,7 +534,15 @@ export default function App() {
                 </svg>
                 <span><strong>Upload Error:</strong> {error}</span>
               </div>
-              <FileUpload onFileSelected={handleFile} />
+              <FileUpload
+                onSampleFileSelected={handleSampleFile}
+                onCalendarFileSelected={handleCalendarFile}
+                sampleFileName={fileName}
+                sampleRowCount={rawSampleRows.length}
+                calendarFileName={calendarFileName}
+                calendarDropCount={calendarEntries.length}
+                onProceed={handleProceed}
+              />
             </>
           )}
 
@@ -601,6 +714,9 @@ export default function App() {
               )}
               {activeNav === 'pending' && (
                 <PendingSamples rows={rows} filters={filters} />
+              )}
+              {activeNav === 'technologist' && (
+                <TechnologistPerformance rows={rows} filters={filters} />
               )}
               {activeNav === 'vendor' && (
                 <VendorPerformance rows={rows} filters={filters} />

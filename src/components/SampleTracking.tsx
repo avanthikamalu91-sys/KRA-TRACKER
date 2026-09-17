@@ -7,7 +7,7 @@ interface Props {
   filters: ActiveFilters;
 }
 
-export type DeadlineCategory = 'all' | 'on_time' | 'late' | 'not_received';
+export type DeadlineCategory = 'all' | 'reviewed_on_time' | 'on_time' | 'late' | 'not_received';
 
 export type SortKey =
   | 'styleCode'
@@ -19,6 +19,7 @@ export type SortKey =
   | 'drop'
   | 'deadlineDate'
   | 'receivedDate'
+  | 'decisionDate'
   | 'daysVariance'
   | 'deadlineStatus'
   | 'rawStatus';
@@ -39,9 +40,13 @@ export interface DeadlineTrackingItem {
   sampleRound: string | number;
   deadlineDate: string;
   receivedDate: string; // Received at Technologist date
-  daysVariance: number | null; // Days difference
-  onTime: boolean | null; // true = On Time, false = Late, null = No true/false (Not Received / Pending)
-  deadlineCategory: 'on_time' | 'late' | 'not_received';
+  decisionDate: string; // Date of approval / rejection
+  daysVariance: number | null; // Days difference from deadline
+  isReviewed: boolean;
+  isReviewedOnTime: boolean;
+  isReceivedOnTime: boolean;
+  onTime: boolean | null; // Combined true/false
+  deadlineCategory: 'reviewed_on_time' | 'on_time' | 'late' | 'not_received';
   deadlineStatus: string;
   rawStatus: string;
 }
@@ -65,6 +70,30 @@ function getTodayStr(): string {
 }
 
 function DeadlineBadge({ category, variance }: { category: DeadlineTrackingItem['deadlineCategory']; variance: number | null }) {
+  if (category === 'reviewed_on_time') {
+    const earlyText = variance !== null && variance < 0 ? ` (${Math.abs(variance)}d early)` : '';
+    return (
+      <span style={{
+        background: '#ecfdf5',
+        color: '#047857',
+        border: '1px solid #6ee7b7',
+        borderRadius: 'var(--radius-pill)',
+        padding: '3px 10px',
+        fontSize: '0.75rem',
+        fontWeight: 800,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        whiteSpace: 'nowrap',
+      }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Reviewed On Time{earlyText}
+      </span>
+    );
+  }
+
   if (category === 'on_time') {
     const earlyText = variance !== null && variance < 0 ? ` (${Math.abs(variance)}d early)` : '';
     return (
@@ -84,7 +113,7 @@ function DeadlineBadge({ category, variance }: { category: DeadlineTrackingItem[
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12"/>
         </svg>
-        On Time{earlyText}
+        Received On Time{earlyText}
       </span>
     );
   }
@@ -179,10 +208,7 @@ export default function SampleTracking({ rows, filters }: Props) {
 
   const todayStr = useMemo(() => getTodayStr(), []);
 
-  // Process rows into items:
-  // 1. On Time (onTime === true)
-  // 2. Late (onTime === false)
-  // 3. Not Received / Pending (onTime === null / no true or false)
+  // Process rows into tracked items
   const trackedItems: DeadlineTrackingItem[] = useMemo(() => {
     const filteredRows = applyFilters(rows, filters);
 
@@ -190,31 +216,82 @@ export default function SampleTracking({ rows, filters }: Props) {
       .filter(r => r.sealType !== null)
       .map(r => {
         const deadline = r.deadlineDate || '';
-        const recDate = r.receivedAtTechDate || (r.statusNormalized === 'Approved' ? r.date : '');
-        const onTimeVal = r.onTime;
+        const isReviewed = r.statusNormalized === 'Approved' || r.statusNormalized === 'Rejected';
+        const recDate = r.receivedAtTechDate || '';
+        const decisionDate = isReviewed ? r.date : '';
+
+        // 1. Reviewed On-Time: status update date (Approved or Rejected) is on or before deadline date
+        const isReviewedOnTime = isReviewed && Boolean(
+          (decisionDate && deadline && decisionDate <= deadline) ||
+          (r.reviewedOnTime === true)
+        );
+
+        // 2. Received On-Time: sample received at technologist on time (including all reviewed on-time samples)
+        const isReceivedOnTime = Boolean(
+          isReviewedOnTime ||
+          (r.receivedOnTime === true) ||
+          (recDate && deadline && recDate <= deadline) ||
+          (recDate && !deadline)
+        );
 
         let category: DeadlineTrackingItem['deadlineCategory'];
         let variance: number | null = null;
         let deadlineStatus = '';
+        let onTimeVal: boolean | null = null;
 
-        if (onTimeVal === true) {
-          // 1. On Time
-          category = 'on_time';
-          if (recDate && deadline) {
+        if (isReviewed) {
+          // Status is Approved or Rejected
+          if (isReviewedOnTime) {
+            category = 'reviewed_on_time';
+            onTimeVal = true;
+            if (decisionDate && deadline) {
+              variance = diffDays(decisionDate, deadline);
+            }
+            deadlineStatus = `Reviewed On Time (${r.statusNormalized})`;
+          } else if (isReceivedOnTime && (!decisionDate || (deadline && decisionDate <= deadline))) {
+            category = 'on_time';
+            onTimeVal = true;
+            if (recDate && deadline) {
+              variance = diffDays(recDate, deadline);
+            }
+            deadlineStatus = `Received On Time (${r.statusNormalized})`;
+          } else if (decisionDate && deadline && decisionDate > deadline) {
+            // Status updated date missed deadline -> Goes to Late
+            category = 'late';
+            onTimeVal = false;
+            variance = diffDays(decisionDate, deadline);
+            deadlineStatus = variance !== null && variance > 0 ? `Late (+${variance}d)` : 'Late';
+          } else if (recDate && deadline && recDate > deadline) {
+            // Received late -> Goes to Late
+            category = 'late';
+            onTimeVal = false;
             variance = diffDays(recDate, deadline);
-          }
-          deadlineStatus = 'On Time';
-        } else if (onTimeVal === false) {
-          // 2. Late
-          category = 'late';
-          if (recDate && deadline) {
-            variance = diffDays(recDate, deadline);
-            deadlineStatus = variance && variance > 0 ? `Late (+${variance}d)` : 'Late';
+            deadlineStatus = variance !== null && variance > 0 ? `Late (+${variance}d)` : 'Late';
           } else {
-            deadlineStatus = 'Late';
+            // Evaluated
+            category = 'reviewed_on_time';
+            onTimeVal = true;
+            deadlineStatus = r.statusNormalized;
+          }
+        } else if (recDate) {
+          // Sample received at technologist, but still Pending review
+          if (deadline && recDate <= deadline) {
+            category = 'on_time';
+            onTimeVal = true;
+            variance = diffDays(recDate, deadline);
+            deadlineStatus = 'Received On Time (Pending Review)';
+          } else if (deadline && recDate > deadline) {
+            category = 'late';
+            onTimeVal = false;
+            variance = diffDays(recDate, deadline);
+            deadlineStatus = variance !== null && variance > 0 ? `Received Late (+${variance}d)` : 'Late';
+          } else {
+            category = 'on_time';
+            onTimeVal = true;
+            deadlineStatus = 'Received (Pending Review)';
           }
         } else {
-          // 3. No true or false (Pending / Not received at technologist)
+          // Not received yet at technologist (Pending)
           category = 'not_received';
           if (deadline) {
             const overdue = diffDays(todayStr, deadline);
@@ -242,7 +319,11 @@ export default function SampleTracking({ rows, filters }: Props) {
           sampleRound: r.sampleRound ? String(r.sampleRound).replace(/^round\s*/i, '') : '1',
           deadlineDate: deadline,
           receivedDate: recDate,
+          decisionDate,
           daysVariance: variance,
+          isReviewed,
+          isReviewedOnTime,
+          isReceivedOnTime,
           onTime: onTimeVal,
           deadlineCategory: category,
           deadlineStatus,
@@ -252,13 +333,19 @@ export default function SampleTracking({ rows, filters }: Props) {
   }, [rows, filters, todayStr]);
 
   // Overall KPI counts
-  const countOnTime = trackedItems.filter(i => i.deadlineCategory === 'on_time').length;
+  const countReviewedOnTime = trackedItems.filter(i => i.deadlineCategory === 'reviewed_on_time' || i.isReviewedOnTime).length;
+  const countReceivedOnTime = trackedItems.filter(i => i.deadlineCategory === 'on_time' || i.isReceivedOnTime).length;
   const countLate = trackedItems.filter(i => i.deadlineCategory === 'late').length;
   const countNotReceived = trackedItems.filter(i => i.deadlineCategory === 'not_received').length;
 
-  const totalEvaluated = countOnTime + countLate;
+  const totalReviewed = trackedItems.filter(i => i.isReviewed).length;
+  const reviewedOnTimeRate = totalReviewed > 0
+    ? ((countReviewedOnTime / totalReviewed) * 100).toFixed(1)
+    : '0.0';
+
+  const totalEvaluated = countReceivedOnTime + countLate;
   const onTimeRate = totalEvaluated > 0
-    ? ((countOnTime / totalEvaluated) * 100).toFixed(1)
+    ? ((countReceivedOnTime / totalEvaluated) * 100).toFixed(1)
     : '0.0';
 
   // Filter items
@@ -267,7 +354,11 @@ export default function SampleTracking({ rows, filters }: Props) {
     return trackedItems.filter(item => {
       if (sealFilter !== 'all' && item.sealType !== sealFilter) return false;
 
-      if (deadlineFilter !== 'all') {
+      if (deadlineFilter === 'reviewed_on_time') {
+        if (!item.isReviewedOnTime && item.deadlineCategory !== 'reviewed_on_time') return false;
+      } else if (deadlineFilter === 'on_time') {
+        if (!item.isReceivedOnTime && item.deadlineCategory !== 'on_time') return false;
+      } else if (deadlineFilter !== 'all') {
         if (item.deadlineCategory !== deadlineFilter) return false;
       }
 
@@ -356,21 +447,35 @@ export default function SampleTracking({ rows, filters }: Props) {
             </div>
           </div>
 
-          <div style={{
-            background: 'rgba(255, 255, 255, 0.15)',
-            borderRadius: 12,
-            padding: '8px 18px',
-            textAlign: 'center',
-            backdropFilter: 'blur(4px)',
-            border: '1px solid rgba(255,255,255,0.2)',
-          }}>
-            <div style={{ color: '#86efac', fontWeight: 900, fontSize: '1.4rem' }}>{onTimeRate}%</div>
-            <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>On-Time Rate</div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{
+              background: 'rgba(16, 185, 129, 0.25)',
+              borderRadius: 12,
+              padding: '8px 18px',
+              textAlign: 'center',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(110, 231, 183, 0.4)',
+            }}>
+              <div style={{ color: '#6ee7b7', fontWeight: 900, fontSize: '1.35rem' }}>{reviewedOnTimeRate}%</div>
+              <div style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>Reviewed On-Time</div>
+            </div>
+
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.15)',
+              borderRadius: 12,
+              padding: '8px 18px',
+              textAlign: 'center',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(255,255,255,0.2)',
+            }}>
+              <div style={{ color: '#86efac', fontWeight: 900, fontSize: '1.35rem' }}>{onTimeRate}%</div>
+              <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>Received On-Time</div>
+            </div>
           </div>
         </div>
 
         {/* Metric Chips Row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
           {/* Total Tracked */}
           <div style={{
             background: 'rgba(255, 255, 255, 0.12)',
@@ -383,7 +488,19 @@ export default function SampleTracking({ rows, filters }: Props) {
             <div style={{ color: 'rgba(255, 255, 255, 0.75)', fontSize: '0.6875rem', fontWeight: 600, textTransform: 'uppercase' }}>Total Samples</div>
           </div>
 
-          {/* 1. On Time */}
+          {/* 1. Reviewed On Time (Approved/Rejected before deadline) */}
+          <div style={{
+            background: 'rgba(16, 185, 129, 0.22)',
+            borderRadius: 10,
+            padding: '10px 14px',
+            textAlign: 'center',
+            border: '1px solid rgba(110, 231, 183, 0.45)',
+          }}>
+            <div style={{ color: '#6ee7b7', fontWeight: 800, fontSize: '1.2rem' }}>{countReviewedOnTime.toLocaleString()}</div>
+            <div style={{ color: '#d1fae5', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>★ Reviewed On-Time</div>
+          </div>
+
+          {/* 2. Received On Time */}
           <div style={{
             background: 'rgba(34, 197, 94, 0.2)',
             borderRadius: 10,
@@ -391,11 +508,11 @@ export default function SampleTracking({ rows, filters }: Props) {
             textAlign: 'center',
             border: '1px solid rgba(74, 222, 128, 0.35)',
           }}>
-            <div style={{ color: '#86efac', fontWeight: 800, fontSize: '1.2rem' }}>{countOnTime.toLocaleString()}</div>
-            <div style={{ color: '#dcfce7', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>✓ On Time</div>
+            <div style={{ color: '#86efac', fontWeight: 800, fontSize: '1.2rem' }}>{countReceivedOnTime.toLocaleString()}</div>
+            <div style={{ color: '#dcfce7', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>✓ Received On-Time</div>
           </div>
 
-          {/* 2. Late */}
+          {/* 3. Late */}
           <div style={{
             background: 'rgba(245, 158, 11, 0.2)',
             borderRadius: 10,
@@ -407,7 +524,7 @@ export default function SampleTracking({ rows, filters }: Props) {
             <div style={{ color: '#fef3c7', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>⚠ Late</div>
           </div>
 
-          {/* 3. Not Received / Pending */}
+          {/* 4. Not Received / Pending */}
           <div style={{
             background: 'rgba(239, 68, 68, 0.22)',
             borderRadius: 10,
@@ -416,14 +533,14 @@ export default function SampleTracking({ rows, filters }: Props) {
             border: '1px solid rgba(248, 113, 113, 0.4)',
           }}>
             <div style={{ color: '#fca5a5', fontWeight: 800, fontSize: '1.2rem' }}>{countNotReceived.toLocaleString()}</div>
-            <div style={{ color: '#fee2e2', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>✕ Not Received / Pending</div>
+            <div style={{ color: '#fee2e2', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>✕ Not Received</div>
           </div>
         </div>
       </div>
 
       {/* ── Table Card ── */}
       <div className="table-card">
-        {/* Toolbar with the 3 Primary Options */}
+        {/* Toolbar with the Primary Options */}
         <div className="table-toolbar" style={{ gap: 12, flexWrap: 'wrap' }}>
           {/* Search Input */}
           <input
@@ -435,7 +552,7 @@ export default function SampleTracking({ rows, filters }: Props) {
             style={{ minWidth: 220 }}
           />
 
-          {/* 3 Primary Deadline Options */}
+          {/* Deadline Compliance Options */}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <span className="filter-label">Compliance:</span>
 
@@ -448,17 +565,27 @@ export default function SampleTracking({ rows, filters }: Props) {
               All ({trackedItems.length})
             </button>
 
-            {/* 1. On Time (True) */}
+            {/* 1. Reviewed On-Time (Approved/Rejected on/before deadline) */}
+            <button
+              id="deadline-filter-reviewed-ontime"
+              className={`btn btn-sm ${deadlineFilter === 'reviewed_on_time' ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => { setDeadlineFilter('reviewed_on_time'); setPage(1); }}
+              style={deadlineFilter === 'reviewed_on_time' ? { background: '#047857', borderColor: '#047857' } : {}}
+            >
+              ★ Reviewed On-Time ({countReviewedOnTime})
+            </button>
+
+            {/* 2. Received On-Time */}
             <button
               id="deadline-filter-ontime"
               className={`btn btn-sm ${deadlineFilter === 'on_time' ? 'btn-primary' : 'btn-outline'}`}
               onClick={() => { setDeadlineFilter('on_time'); setPage(1); }}
               style={deadlineFilter === 'on_time' ? { background: '#15803d', borderColor: '#15803d' } : {}}
             >
-              ✓ On Time ({countOnTime})
+              ✓ Received On-Time ({countReceivedOnTime})
             </button>
 
-            {/* 2. Late (False) */}
+            {/* 3. Late (False) */}
             <button
               id="deadline-filter-late"
               className={`btn btn-sm ${deadlineFilter === 'late' ? 'btn-primary' : 'btn-outline'}`}
@@ -468,7 +595,7 @@ export default function SampleTracking({ rows, filters }: Props) {
               ⚠ Late ({countLate})
             </button>
 
-            {/* 3. Not Received / Pending (No True/False) */}
+            {/* 4. Not Received / Pending */}
             <button
               id="deadline-filter-notreceived"
               className={`btn btn-sm ${deadlineFilter === 'not_received' ? 'btn-primary' : 'btn-outline'}`}
@@ -522,6 +649,9 @@ export default function SampleTracking({ rows, filters }: Props) {
                 <th style={thStyle('receivedDate')} onClick={() => handleSort('receivedDate')}>
                   Received at Tech <SortIcon active={sortKey === 'receivedDate'} dir={sortDir} />
                 </th>
+                <th style={thStyle('decisionDate')} onClick={() => handleSort('decisionDate')}>
+                  Review / Decision <SortIcon active={sortKey === 'decisionDate'} dir={sortDir} />
+                </th>
                 <th style={thStyle('deadlineStatus')} onClick={() => handleSort('deadlineStatus')}>
                   Compliance Status <SortIcon active={sortKey === 'deadlineStatus'} dir={sortDir} />
                 </th>
@@ -530,7 +660,7 @@ export default function SampleTracking({ rows, filters }: Props) {
             <tbody>
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={10}>
                     <div className="empty-state">
                       <div className="empty-state-icon">
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--brand-600)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -549,6 +679,9 @@ export default function SampleTracking({ rows, filters }: Props) {
               ) : (
                 paginated.map((item, i) => {
                   const rank = (page - 1) * PAGE_SIZE + i + 1;
+                  const isApproved = item.rawStatus.toLowerCase().includes('approv');
+                  const isRejected = item.rawStatus.toLowerCase().includes('reject');
+
                   return (
                     <tr key={`${item.styleCode}-${item.sealType}-${i}`}>
                       {/* Rank */}
@@ -617,9 +750,37 @@ export default function SampleTracking({ rows, filters }: Props) {
                           <span style={{ color: 'var(--text-body)', fontWeight: 600 }}>
                             {formatDateDisplay(item.receivedDate)}
                           </span>
+                        ) : item.isReviewed ? (
+                          <span style={{ color: 'var(--green-text)', fontWeight: 600, fontSize: '0.8rem' }} title="Received (Inferred from Approved/Rejected status)">
+                            ✓ Received {item.decisionDate ? `(${formatDateDisplay(item.decisionDate)})` : ''}
+                          </span>
                         ) : (
                           <span style={{ color: '#ef4444', fontWeight: 700, fontSize: '0.8rem' }}>
                             ✕ Not Received
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Review / Decision Column */}
+                      <td>
+                        {item.isReviewed ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{
+                              fontWeight: 700,
+                              fontSize: '0.8rem',
+                              color: isApproved ? 'var(--green-text)' : isRejected ? 'var(--red-text)' : 'var(--text-heading)',
+                            }}>
+                              {item.rawStatus || (isApproved ? 'Approved' : 'Rejected')}
+                            </span>
+                            {item.decisionDate && (
+                              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                {formatDateDisplay(item.decisionDate)}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                            Pending Decision
                           </span>
                         )}
                       </td>

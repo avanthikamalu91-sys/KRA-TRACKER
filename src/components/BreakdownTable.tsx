@@ -225,6 +225,10 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
     const totalOnTimeEval = rows.reduce((acc, r) => acc + r.overallOnTimeTotal, 0);
     const overallOnTimePct = totalOnTimeEval > 0 ? (totalOnTime / totalOnTimeEval) * 100 : 0;
 
+    const totalReviewedOnTime = rows.reduce((acc, r) => acc + (r.overallReviewedOnTimeCount || 0), 0);
+    const totalReviewedEval = rows.reduce((acc, r) => acc + (r.overallReviewedOnTimeTotal || 0), 0);
+    const overallReviewedOnTimePct = totalReviewedEval > 0 ? (totalReviewedOnTime / totalReviewedEval) * 100 : 0;
+
     const sortedByRFT = [...rows].filter(r => r.overallUniqueStyles > 0).sort((a, b) => b.overallRFTPct - a.overallRFTPct);
     const bestGroup = sortedByRFT[0];
     const lowestGroup = sortedByRFT[sortedByRFT.length - 1];
@@ -237,6 +241,8 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
       overallRFT,
       totalOnTime,
       overallOnTimePct,
+      totalReviewedOnTime,
+      overallReviewedOnTimePct,
       bestGroup,
       lowestGroup,
     };
@@ -370,6 +376,14 @@ export default function BreakdownTable({ rows, dimension, onDimensionChange, all
 
           <div className="summary-item">
             <span className="summary-item-label">Reviewed On-Time</span>
+            <span className="summary-item-value" style={{ color: summary.overallReviewedOnTimePct >= 80 ? 'var(--green-text)' : '#f59e0b' }}>
+              {summary.overallReviewedOnTimePct.toFixed(1)}%
+            </span>
+            <span className="metric-sub">{summary.totalReviewedOnTime.toLocaleString()} approved/rejected on-time</span>
+          </div>
+
+          <div className="summary-item">
+            <span className="summary-item-label">Received On-Time</span>
             <span className="summary-item-value" style={{ color: summary.overallOnTimePct >= 80 ? 'var(--green-text)' : '#f59e0b' }}>
               {summary.overallOnTimePct.toFixed(1)}%
             </span>

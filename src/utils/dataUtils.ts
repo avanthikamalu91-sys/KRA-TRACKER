@@ -26,8 +26,13 @@ export interface NormalizedRow {
   date: string; // YYYY-MM-DD
   receivedAtTechDate: string; // YYYY-MM-DD
   deadlineDate: string; // YYYY-MM-DD
+  exFactoryDate?: string; // YYYY-MM-DD
+  calendarMatched?: boolean;
+  receivedOnTime: boolean | null;
+  reviewedOnTime: boolean | null;
   onTime: boolean | null;
   comments: string;
+  modifiedBy: string;
 }
 
 export interface StyleMetrics {
@@ -104,6 +109,7 @@ const COL_ALIASES: Record<string, string[]> = {
   deadlineDate:  ['Deadline Date', 'Deadline', 'Dead Line', 'Dead line Date', 'Due Date', 'Target Date', 'Seal Deadline', 'Fitting Deadline', 'Target Date of Sealing', 'Sealing Target Date', 'Requested Date', 'Planned Date', 'Critical Path Date', 'CP Date', 'Tech Deadline', 'Target Receipt Date', 'Expected Date', 'Sample Due Date', 'deadline_date', 'due_date', 'deadline'],
   onTime:        ['On Time', 'OnTime', 'On-Time', 'Is On Time', 'On Time?', 'Ontime Status', 'On Time Status', 'On Time (Y/N)', 'On Time Delivery', 'On Time Sealing', 'OT', 'on_time', 'ontime'],
   comments:      ['Comments', 'Comment', 'Reason', 'Rejection Reason', 'Reason for Rejection', 'Remarks', 'Remark', 'Tech Comments', 'Technical Comments', 'Rejection Remarks', 'Defect Reason', 'Defect', 'Feedback', 'Notes', 'Reason Description', 'Fitting Comments', 'Sample Comments', 'comments', 'remarks', 'reason'],
+  modifiedBy:    ['Status Updated By', 'Status Update By', 'Status Updated by', 'Status Update by', 'Status Updated By Name', 'Status Changed By', 'Status Modified By', 'Status By', 'Status Given By', 'Status By Person', 'Status Updated By Person', 'Modified By', 'Modified By Name', 'Last Modified By', 'Updated By', 'Updated By Name', 'Changed By', 'Modifier', 'User', 'User Name', 'Username', 'Employee', 'Employee Name', 'Technologist Name', 'Technologist', 'Tech Name', 'Created By', 'Created By Name', 'Inspector', 'Auditor', 'Reviewed By', 'Approved By', 'Action By', 'Person', 'Person Name', 'Sealer Name', 'modified_by', 'created_by', 'updated_by', 'user_name', 'employee_name', 'status_updated_by', 'status_update_by'],
 };
 
 function findColumn(row: RawRow, aliases: string[]): string {
@@ -301,6 +307,44 @@ function extractComments(row: RawRow): string {
   return '';
 }
 
+function extractModifiedBy(row: RawRow): string {
+  const col = columnMap['modifiedBy'];
+  if (col && row[col] !== undefined && row[col] !== null) {
+    const s = String(row[col]).trim();
+    if (s && s !== '—' && s !== '-') return s;
+  }
+  for (const [key, val] of Object.entries(row)) {
+    const k = key.toLowerCase();
+    if (
+      (k.includes('status updated by') ||
+        k.includes('status update by') ||
+        k.includes('status by') ||
+        k.includes('modified by') ||
+        k.includes('updated by') ||
+        k.includes('created by') ||
+        k.includes('technologist') ||
+        k.includes('employee') ||
+        k.includes('modifier') ||
+        k.includes('inspector') ||
+        k.includes('auditor') ||
+        k.includes('user') ||
+        k.includes('person') ||
+        k.includes('action by') ||
+        k.includes('reviewed by') ||
+        k.includes('approved by')) &&
+      val
+    ) {
+      const s = String(val).trim();
+      if (s && s !== '—' && s !== '-' && !s.toLowerCase().includes('blue seal') && !s.toLowerCase().includes('silver seal')) return s;
+    }
+  }
+  const sealer = getString(row, 'sealer');
+  if (sealer && !sealer.toLowerCase().includes('blue seal') && !sealer.toLowerCase().includes('silver seal')) {
+    return sealer;
+  }
+  return '';
+}
+
 // ── Normalize status ────────────────────────────────────────
 function normalizeStatus(raw: string): 'Approved' | 'Rejected' | 'Pending' | 'Cancelled' | 'Other' {
   const u = raw.toUpperCase().trim();
@@ -351,15 +395,32 @@ export function normalizeRows(raw: RawRow[]): NormalizedRow[] {
       const receivedAtTechDate = extractReceivedAtTechDate(row);
       const deadlineDate = extractDeadlineDate(row);
 
-      // Check explicit onTime column or compute from received & deadline dates
+      // 1. Reviewed On-Time: status update date (Approved or Rejected) is on or before deadline date
+      const isReviewed = normalizeStatus(status) === 'Approved' || normalizeStatus(status) === 'Rejected';
+      let reviewedOnTime: boolean | null = null;
+      if (isReviewed && deadlineDate && date) {
+        reviewedOnTime = date <= deadlineDate;
+      }
+
+      // 2. Received On-Time: received at technologist is on time (or reviewed on time, since reviewing on time implies receipt on time)
       const onTimeCol = columnMap['onTime'];
-      let onTime: boolean | null = onTimeCol && row[onTimeCol] !== undefined ? parseOnTimeValue(row[onTimeCol]) : null;
-      if (onTime === null) {
-        if (receivedAtTechDate && deadlineDate) {
-          onTime = receivedAtTechDate <= deadlineDate;
-        } else if (date && deadlineDate && normalizeStatus(status) === 'Approved') {
-          onTime = date <= deadlineDate;
-        }
+      let rawReceivedOnTime: boolean | null = onTimeCol && row[onTimeCol] !== undefined ? parseOnTimeValue(row[onTimeCol]) : null;
+      if (rawReceivedOnTime === null && receivedAtTechDate && deadlineDate) {
+        rawReceivedOnTime = receivedAtTechDate <= deadlineDate;
+      }
+      
+      let receivedOnTime: boolean | null = rawReceivedOnTime;
+      if (reviewedOnTime === true) {
+        // If reviewed on time, it was naturally received on time
+        receivedOnTime = true;
+      } else if (receivedOnTime === null && isReviewed && date && deadlineDate) {
+        receivedOnTime = date <= deadlineDate;
+      }
+
+      // Combined onTime flag: reviewed on-time or received on-time
+      let onTime: boolean | null = reviewedOnTime !== null ? reviewedOnTime : receivedOnTime;
+      if (onTime === null && date && deadlineDate && isReviewed) {
+        onTime = date <= deadlineDate;
       }
 
       return {
@@ -380,8 +441,11 @@ export function normalizeRows(raw: RawRow[]): NormalizedRow[] {
         date,
         receivedAtTechDate,
         deadlineDate,
+        receivedOnTime,
+        reviewedOnTime,
         onTime,
         comments:         extractComments(row),
+        modifiedBy:       extractModifiedBy(row),
       } as NormalizedRow;
     })
     .filter(r => r.sealType !== null); // drop non-Blue/Silver rows early for perf
@@ -569,6 +633,9 @@ export interface BreakdownRow {
   overallOnTimeCount: number;
   overallOnTimeTotal: number;
   overallOnTimePct: number;
+  overallReviewedOnTimeCount: number;
+  overallReviewedOnTimeTotal: number;
+  overallReviewedOnTimePct: number;
   // Blue Seal
   blueSamples: number;
   blueTotal: number; // Unique Styles
@@ -581,6 +648,9 @@ export interface BreakdownRow {
   blueOnTimeCount: number;
   blueOnTimeTotal: number;
   blueOnTimePct: number;
+  blueReviewedOnTimeCount: number;
+  blueReviewedOnTimeTotal: number;
+  blueReviewedOnTimePct: number;
   // Silver Seal
   silverSamples: number;
   silverTotal: number; // Unique Styles
@@ -593,6 +663,9 @@ export interface BreakdownRow {
   silverOnTimeCount: number;
   silverOnTimeTotal: number;
   silverOnTimePct: number;
+  silverReviewedOnTimeCount: number;
+  silverReviewedOnTimeTotal: number;
+  silverReviewedOnTimePct: number;
 }
 
 export function computeBreakdown(
@@ -622,13 +695,25 @@ export function computeBreakdown(
     const blueOnTimeTotal = dimBlueRows.filter(r => r.onTime !== null).length;
     const blueOnTimePct = blueOnTimeTotal > 0 ? Math.round((blueOnTimeCount / blueOnTimeTotal) * 1000) / 10 : 0;
 
+    const blueReviewedOnTimeCount = dimBlueRows.filter(r => r.reviewedOnTime === true).length;
+    const blueReviewedOnTimeTotal = dimBlueRows.filter(r => r.reviewedOnTime !== null).length;
+    const blueReviewedOnTimePct = blueReviewedOnTimeTotal > 0 ? Math.round((blueReviewedOnTimeCount / blueReviewedOnTimeTotal) * 1000) / 10 : 0;
+
     const silverOnTimeCount = dimSilverRows.filter(r => r.onTime === true).length;
     const silverOnTimeTotal = dimSilverRows.filter(r => r.onTime !== null).length;
     const silverOnTimePct = silverOnTimeTotal > 0 ? Math.round((silverOnTimeCount / silverOnTimeTotal) * 1000) / 10 : 0;
 
+    const silverReviewedOnTimeCount = dimSilverRows.filter(r => r.reviewedOnTime === true).length;
+    const silverReviewedOnTimeTotal = dimSilverRows.filter(r => r.reviewedOnTime !== null).length;
+    const silverReviewedOnTimePct = silverReviewedOnTimeTotal > 0 ? Math.round((silverReviewedOnTimeCount / silverReviewedOnTimeTotal) * 1000) / 10 : 0;
+
     const overallOnTimeCount = dimRows.filter(r => r.onTime === true).length;
     const overallOnTimeTotal = dimRows.filter(r => r.onTime !== null).length;
     const overallOnTimePct = overallOnTimeTotal > 0 ? Math.round((overallOnTimeCount / overallOnTimeTotal) * 1000) / 10 : 0;
+
+    const overallReviewedOnTimeCount = dimRows.filter(r => r.reviewedOnTime === true).length;
+    const overallReviewedOnTimeTotal = dimRows.filter(r => r.reviewedOnTime !== null).length;
+    const overallReviewedOnTimePct = overallReviewedOnTimeTotal > 0 ? Math.round((overallReviewedOnTimeCount / overallReviewedOnTimeTotal) * 1000) / 10 : 0;
 
     return {
       dimension: val,
@@ -644,6 +729,9 @@ export function computeBreakdown(
       overallOnTimeCount,
       overallOnTimeTotal,
       overallOnTimePct,
+      overallReviewedOnTimeCount,
+      overallReviewedOnTimeTotal,
+      overallReviewedOnTimePct,
       // Blue Seal
       blueSamples:   blue.totalRows,
       blueTotal:     blue.totalUniqueStyles,
@@ -656,6 +744,9 @@ export function computeBreakdown(
       blueOnTimeCount,
       blueOnTimeTotal,
       blueOnTimePct,
+      blueReviewedOnTimeCount,
+      blueReviewedOnTimeTotal,
+      blueReviewedOnTimePct,
       // Silver Seal
       silverSamples:  silver.totalRows,
       silverTotal:    silver.totalUniqueStyles,
@@ -668,6 +759,9 @@ export function computeBreakdown(
       silverOnTimeCount,
       silverOnTimeTotal,
       silverOnTimePct,
+      silverReviewedOnTimeCount,
+      silverReviewedOnTimeTotal,
+      silverReviewedOnTimePct,
     };
   });
 }
